@@ -1,4 +1,3 @@
-#include "assert.h"
 #include "kernel.h"
 #include "multiboot.h"
 #include "string.h"

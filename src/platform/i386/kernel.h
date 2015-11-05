@@ -10,6 +10,7 @@
 #include <thd.h>
 
 /* A not so nice way of oopsing */
+#undef die
 #define die(fmt, ...) do {              \
     printk(fmt,##__VA_ARGS__);   \
     khalt();				\

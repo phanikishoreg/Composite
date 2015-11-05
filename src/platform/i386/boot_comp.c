@@ -1,4 +1,3 @@
-#include "assert.h"
 #include "kernel.h"
 #include "boot_comp.h"
 #include "chal_cpu.h"

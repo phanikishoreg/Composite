@@ -40,7 +40,6 @@ static int
 tcap_delete(struct tcap *s, struct tcap *tcap)
 {
 	assert(s && tcap);
-	assert(tcap < &s->tcaps[TCAP_MAX] && tcap >= &s->tcaps[0]);
 	/* Can't delete your persistent tcap! */
 	if (s == tcap) return -1;
 	/* tcap still holds a reference to a child */
