@@ -14,6 +14,7 @@
 #include "include/chal/cpuid.h"
 #include "include/tcap.h"
 #include "include/chal/defs.h"
+#include "include/hw.h"
 
 #define COS_DEFAULT_RET_CAP 0
 
@@ -551,6 +552,48 @@ cap_asnd_op(struct cap_asnd *asnd, struct thread *thd, struct pt_regs *regs,
 	return cap_switch_thd(regs, thd, next, ci, cos_info);
 }
 
+#if 0
+/* 
+ * From the Interrupt context, I don't have a asnd capability struct.
+ * I don't have many other structs that are passed in cap_asnd_op().
+ * What do I do? Without that, this is not required. I can just use Thdcap for now
+ * and for simplicity!! 
+ * Talk to Gabe about it!
+ */
+int
+cap_hw_asnd_op(struct cap_arcv* arcv, struct pt_regs *regs)
+{
+	struct comp_info *ci;
+	struct cap_arcv *arcv;
+	struct thread *rcv_thd, *thd, *next;
+	struct tcap *tcap, *rcv_tcap;
+	struct cos_cpu_local_info *cos_info;
+	int curr_cpu = get_cpuid();
+	unsigned long ip, sp;
+
+	if (unlikely(!arcv)) return -EINVAL;
+	
+	/*if (arcv->cpuid != curr_cpu) return cos_cap_send_ipi(cpuid, arcv); */
+	cos_info = cos_cpu_local_info();
+	assert(cos_info);
+	thd      = thd_current(cos_info);
+	tcap     = tcap_current(cos_info);
+	assert(thd);
+	rcv_thd  = arcv->thd;
+	ci       = thd_invstk_current(thd, &ip, &sp, cos_info);
+	assert(ci  && ci->captbl);
+	assert(!thd->state & THD_STATE_PREEMPTED);
+	rcv_tcap = rcv_thd->tcap;
+	assert(rcv_tcap);
+
+	next = asnd_process(rcv_thd, thd, rcv_tcap, tcap);
+	if (next == thd) return 1; /* current thread is a preempted one! */
+
+	thd->state |= THD_STATE_PREEMPTED;
+	return cap_switch_thd(regs, thd, next, ci, cos_info);
+}
+#endif
+
 int
 capinv_int_snd(struct thread *rcv_thd, struct pt_regs *regs)
 {
@@ -1042,6 +1085,20 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 
 			break;
 		}
+		case CAPTBL_OP_HW_ACTIVATE:
+		{
+			u32_t bitmap = __userregs_get2(regs);
+
+			ret = hw_activate(ct, cap, capin, bitmap);
+			break;
+		}
+		case CAPTBL_OP_HW_DEACTIVATE:
+		{
+			livenessid_t lid  = __userregs_get2(regs);
+
+			ret = hw_deactivate(op_cap, capin, lid);
+			break;
+		}
 		default: goto err;
 		}
 		break;
@@ -1291,6 +1348,41 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 		default: goto err;
 		}
 
+	}
+	case CAP_HW:
+	{
+		switch(op) {
+		case CAPTBL_OP_HW_ATTACH:
+		{
+			struct cap_thd *thdc;
+			struct thread *thd;
+			struct cap_hw *hwc;
+
+			u32_t irqline = __userregs_get1(regs);
+			/*capid_t rcvcap = __userregs_get2(regs);*/
+			capid_t thdcap = __userregs_get2(regs);
+			thdc = (struct cap_thd *)captbl_lkup(ci->captbl, thdcap);
+			if (unlikely(!thdc || thdc->h.type != CAP_THD || thdc->cpuid != get_cpuid())) return -EINVAL;
+			thd = thdc->t;
+			/* ret = hw_attach_thdcap((struct cap_hw *)ch, irqline, thdcap);*/
+			/* checking thread capability here, anyway! save thread pointer instead */
+			ret = hw_attach_thd((struct cap_hw *)ch, irqline, thd);
+			/*ret = hw_attach_rcvcap((struct cap_hw *)ch, irqline, rcvcap);*/
+			break;
+		}
+		case CAPTBL_OP_HW_DETACH:
+		{
+			struct cap_hw *hwc;
+
+			u32_t irqline = __userregs_get1(regs);
+			/*ret = hw_detach_thdcap((struct cap_hw *)ch, irqline);*/
+			ret = hw_detach_thd((struct cap_hw *)ch, irqline);
+			/*ret = hw_detach_rcvcap((struct cap_hw *)ch, irqline);*/
+			break;
+		}
+		default: goto err;
+		}
+		break;
 	}
 	default: break;
 	}

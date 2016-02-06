@@ -19,6 +19,7 @@ typedef capid_t tcap_t;
 typedef capid_t compcap_t;
 typedef capid_t captblcap_t;
 typedef capid_t pgtblcap_t;
+typedef capid_t hwcap_t;
 
 /* Memory source information */
 struct cos_meminfo {
@@ -82,5 +83,11 @@ tcap_t cos_tcap_split(struct cos_compinfo *ci, tcap_t src, tcap_res_t res, tcap_
 int cos_tcap_transfer(tcap_t src, tcap_t dst, tcap_res_t res, tcap_prio_t prio);
 int cos_tcap_delegate(tcap_t src, arcvcap_t dst, tcap_res_t res, tcap_prio_t prio, tcap_deleg_flags_t flags);
 int cos_tcap_merge(tcap_t dst, tcap_t rm);
+
+/* Hardware operations */
+hwcap_t cos_hw_alloc(struct cos_compinfo *ci, u32_t bitmap);
+/*int cos_hw_attach(hwcap_t hwc, u32_t irqline, arcvcap_t arcv);*/
+int cos_hw_attach(hwcap_t hwc, u32_t irqline, thdcap_t thdcap);
+int cos_hw_detach(hwcap_t hwc, u32_t irqline); 
 
 #endif /* COS_KERNEL_API_H */

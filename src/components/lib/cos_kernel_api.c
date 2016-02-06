@@ -509,6 +509,20 @@ cos_asnd_alloc(struct cos_compinfo *ci, arcvcap_t arcvcap, captblcap_t ctcap)
 	return cap;
 }
 
+hwcap_t
+cos_hw_alloc(struct cos_compinfo *ci, u32_t bitmap)
+{
+	capid_t cap;
+
+	assert(ci);
+
+	cap = __capid_bump_alloc(ci, CAP_HW);
+	if (!cap) return 0;
+	if (call_cap_op(ci->captbl_cap, CAPTBL_OP_HW_ACTIVATE, cap, bitmap, 0, 0))  BUG();
+
+	return cap;
+}
+
 void *
 cos_page_bump_alloc(struct cos_compinfo *ci)
 { return (void*)__page_bump_alloc(ci); }
@@ -559,6 +573,18 @@ cos_mem_move(pgtblcap_t ptdst, vaddr_t dst, pgtblcap_t ptsrc, vaddr_t src)
 	assert(0);
 	return 0;
 }
+
+/*int
+cos_hw_attach(hwcap_t hwc, u32_t irqline, arcvcap_t arcv)
+{ return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, irqline, arcv, 0, 0); }*/
+
+int
+cos_hw_attach(hwcap_t hwc, u32_t irqline, thdcap_t thdcap)
+{ return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, irqline, thdcap, 0, 0); }
+
+int
+cos_hw_detach(hwcap_t hwc, u32_t irqline)
+{ return call_cap_op(hwc, CAPTBL_OP_HW_DETACH, irqline, 0, 0, 0); }
 
 /* TODO: generalize to modify all state */
 int

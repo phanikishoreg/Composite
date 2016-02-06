@@ -405,38 +405,41 @@ test_inv_perf(void)
 void
 cos_init(void)
 {
+	hwid_t timerid = HW_PERIODIC;
+
 	printc("\nMicro Booter started.\n");
 
 	cos_meminfo_init(&booter_info.mi, BOOT_MEM_PM_BASE, COS_MEM_USER_PA_SZ,
 			 BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ);
 	cos_compinfo_init(&booter_info, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_COMP,
 			  (vaddr_t)cos_get_heap_ptr(), BOOT_CAPTBL_FREE, &booter_info);
+	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, timerid, BOOT_CAPTBL_SELF_INITTHD_BASE);	
 
-	printc("---------------------------\n");
-	test_thds();
-	printc("---------------------------\n");
-	test_thds_perf();
-	printc("---------------------------\n");
-
+//	printc("---------------------------\n");
+//	test_thds();
+//	printc("---------------------------\n");
+//	test_thds_perf();
+//	printc("---------------------------\n");
+//
 	printc("---------------------------\n");
 	test_timer();
 	printc("---------------------------\n");
-
-	printc("---------------------------\n");
-	test_mem();
-	printc("---------------------------\n");
-
-	printc("---------------------------\n");
-	test_async_endpoints();
-	printc("---------------------------\n");
-	test_async_endpoints_perf();
-	printc("---------------------------\n");
-
-	printc("---------------------------\n");
-	test_inv();
-	printc("---------------------------\n");
-	test_inv_perf();
-	printc("---------------------------\n");
+//
+//	printc("---------------------------\n");
+//	test_mem();
+//	printc("---------------------------\n");
+//
+//	printc("---------------------------\n");
+//	test_async_endpoints();
+//	printc("---------------------------\n");
+//	test_async_endpoints_perf();
+//	printc("---------------------------\n");
+//
+//	printc("---------------------------\n");
+//	test_inv();
+//	printc("---------------------------\n");
+//	test_inv_perf();
+//	printc("---------------------------\n");
 
 	printc("\nMicro Booter done.\n");
 
