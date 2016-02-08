@@ -134,6 +134,7 @@ typedef enum {
 	HW_ID29,
 	HW_ID30,
 	HW_ID31,
+	HW_ID32,
 } hwid_t;
 
 typedef unsigned long capid_t;
