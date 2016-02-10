@@ -574,14 +574,15 @@ cos_mem_move(pgtblcap_t ptdst, vaddr_t dst, pgtblcap_t ptsrc, vaddr_t src)
 	return 0;
 }
 
-/*int
-cos_hw_attach(hwcap_t hwc, u32_t irqline, arcvcap_t arcv)
-{ return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, irqline, arcv, 0, 0); }*/
-
+#ifdef DEV_RCV
+int
+cos_hw_attach(hwcap_t hwc, hwid_t hwid, arcvcap_t arcv)
+{ return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, hwid, arcv, 0, 0); }
+#else
 int
 cos_hw_attach(hwcap_t hwc, hwid_t hwid, thdcap_t thdcap)
 { return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, hwid, thdcap, 0, 0); }
-
+#endif
 int
 cos_hw_detach(hwcap_t hwc, hwid_t hwid)
 { return call_cap_op(hwc, CAPTBL_OP_HW_DETACH, hwid, 0, 0, 0); }

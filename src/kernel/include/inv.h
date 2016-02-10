@@ -90,6 +90,24 @@ sret_deactivate(struct cap_captbl *t, capid_t capin, livenessid_t lid)
 { return cap_capdeactivate(t, capin, CAP_SRET, lid); }
 
 static int
+asnd_copy(struct cap_asnd *asndc, struct cap_arcv *arcvc, capid_t rcv_cap, u32_t budget, u32_t period)
+{
+	/* copy data from the arcv capability */
+	memcpy(&asndc->comp_info, &arcvc->comp_info, sizeof(struct comp_info));
+	asndc->h.type         = CAP_ASND;
+	asndc->arcv_epoch     = arcvc->epoch;
+	asndc->arcv_cpuid     = arcvc->cpuid;
+	/* ...and initialize our own data */
+	asndc->cpuid          = get_cpuid();
+	asndc->arcv_capid     = rcv_cap;
+	asndc->period         = period;
+	asndc->budget         = budget;
+	asndc->replenish_amnt = budget;
+
+	return 0;
+}
+
+static int
 asnd_activate(struct captbl *t, capid_t cap, capid_t capin, capid_t rcv_captbl, capid_t rcv_cap, u32_t budget, u32_t period)
 {
 	struct cap_captbl *rcv_ct;
@@ -127,6 +145,7 @@ asnd_deactivate(struct cap_captbl *t, capid_t capin, livenessid_t lid)
 
 /* send to a thread within an interrupt */
 int capinv_int_snd(struct thread *rcv_thd, struct pt_regs *regs);
+int cap_hw_asnd(struct cap_asnd *asndc, struct pt_regs *regs);
 
 static void
 __arcv_setup(struct cap_arcv *arcv, struct thread *thd, struct thread *notif)
@@ -167,6 +186,7 @@ arcv_activate(struct captbl *t, capid_t cap, capid_t capin, capid_t comp_cap, ca
 	thdc = (struct cap_thd *)captbl_lkup(t, thd_cap);
 	if (unlikely(!thdc || thdc->h.type != CAP_THD || thdc->cpuid != get_cpuid())) return -EINVAL;
 	thd = thdc->t;
+	print_thd_regs("arcv", thd);
 	/* a single thread cannot be bound to multiple rcvcaps */
 	if (thd_bound2rcvcap(thd)) return -EINVAL;
 

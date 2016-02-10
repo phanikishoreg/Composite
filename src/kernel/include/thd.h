@@ -89,6 +89,30 @@ struct cap_thd {
 } __attribute__((packed));
 
 static void
+print_regs(struct pt_regs *r) 
+{
+
+/*
+	printk("ax:%x bx:%x cx:%x dx:%x, cs:%x ds:%x es:%x fs:%x gs:%x ss:%x, si:%x di:%x ip:%x sp:%x bp:%x, flags:%x, orig_ax:%x\n",
+		r->ax, r->bx, r->cx, r->dx,
+		r->cs, r->ds, r->es, r->fs, r->gs, r->ss,
+		r->si, r->di, r->ip, r->sp, r->bp,
+		r->flags,
+		r->orig_ax);
+*/
+}
+
+static void
+print_thd_regs(const char *msg, struct thread *thd) 
+{
+/*
+	printk("%s--> ", msg);
+	struct pt_regs *r = &thd->regs;
+	print_regs(r);
+*/
+}
+
+static void
 thd_upcall_setup(struct thread *thd, u32_t entry_addr, int option, int arg1, int arg2, int arg3)
 {
 	struct pt_regs *r = &thd->regs;

@@ -312,7 +312,7 @@ test_timer(void)
 		cos_thd_switch(tc);
 	}
 
-	printc("Timer test completed.\nSuccess.\n");
+	printc("\nTimer test completed.\nSuccess.\n");
 }
 
 long long midinv_cycles = 0LL;
@@ -411,33 +411,37 @@ cos_init(void)
 			 BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ);
 	cos_compinfo_init(&booter_info, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_COMP,
 			  (vaddr_t)cos_get_heap_ptr(), BOOT_CAPTBL_FREE, &booter_info);
-	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC, BOOT_CAPTBL_SELF_INITTHD_BASE);	
+#ifdef DEV_RCV
+	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC, BOOT_CAPTBL_SELF_INITRCV_BASE);
+#else
+	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC, BOOT_CAPTBL_SELF_INITTHD_BASE);
+#endif
 
-//	printc("---------------------------\n");
-//	test_thds();
-//	printc("---------------------------\n");
-//	test_thds_perf();
-//	printc("---------------------------\n");
-//
+	printc("---------------------------\n");
+	test_thds();
+	printc("---------------------------\n");
+	test_thds_perf();
+	printc("---------------------------\n");
+
 	printc("---------------------------\n");
 	test_timer();
 	printc("---------------------------\n");
-//
-//	printc("---------------------------\n");
-//	test_mem();
-//	printc("---------------------------\n");
-//
-//	printc("---------------------------\n");
-//	test_async_endpoints();
-//	printc("---------------------------\n");
-//	test_async_endpoints_perf();
-//	printc("---------------------------\n");
-//
-//	printc("---------------------------\n");
-//	test_inv();
-//	printc("---------------------------\n");
-//	test_inv_perf();
-//	printc("---------------------------\n");
+
+	printc("---------------------------\n");
+	test_mem();
+	printc("---------------------------\n");
+
+	printc("---------------------------\n");
+	test_async_endpoints();
+	printc("---------------------------\n");
+	test_async_endpoints_perf();
+	printc("---------------------------\n");
+
+	printc("---------------------------\n");
+	test_inv();
+	printc("---------------------------\n");
+	test_inv_perf();
+	printc("---------------------------\n");
 
 	printc("\nMicro Booter done.\n");
 

@@ -129,7 +129,11 @@ kern_boot_comp(void)
         if (sret_activate(ct, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SRET)) assert(0);
         if (pgtbl_activate(ct, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_PT, pgtbl, 0)) assert(0);
 
+#ifdef DEV_RCV
+	hw_asndcap_init();
+#else
 	hw_thdcap_init();
+#endif
 	if (hw_activate(ct, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_INITHW_BASE, hw_bitmap)) assert(0);
 
 	printk("\tCapability table and page-table created.\n");

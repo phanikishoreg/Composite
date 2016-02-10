@@ -11,25 +11,38 @@
 #include "component.h"
 #include "thd.h"
 #include "chal/call_convention.h"
+#include "inv.h"
 
-#define IRQ_LINES_TOTAL 256
-#define IRQ_LINES_EXTERNAL_MIN 32
-#define IRQ_LINES_EXTERNAL_MAX 63
+#define HW_LINES_TOTAL 256
+#define HW_LINES_EXTERNAL_MIN 32
+#define HW_LINES_EXTERNAL_MAX 63
 
-struct thread* hw_thd[IRQ_LINES_TOTAL];
-/* why thdcap, save thd pointer instead */
-/* capid_t hw_thdcap[IRQ_LINES_TOTAL]; */
-/* capid_t hw_rcvcap[IRQ_LINES_TOTAL]; */
+#ifdef DEV_RCV
+struct cap_asnd hw_asnd_caps[HW_LINES_TOTAL];
+#else
+struct thread* hw_thd[HW_LINES_TOTAL];
+#endif
 
 struct cap_hw {
 	struct cap_header h;
 	u32_t hw_bitmap;
 } __attribute__((packed));
 
+#ifndef DEV_RCV
 static void
 hw_thdcap_init(void)
-{ memset(hw_thd, 0, sizeof(struct thread *) * IRQ_LINES_TOTAL); }
-
+{
+	printk("HW:Working with Threads..\n"); 
+	memset(hw_thd, 0, sizeof(struct thread *) * HW_LINES_TOTAL); 
+}
+#else
+static void
+hw_asndcap_init(void)
+{ 
+	printk("HW:Working with Async Snd..\n"); 
+	memset(&hw_asnd_caps, 0, sizeof(struct cap_asnd) * HW_LINES_TOTAL); 
+}
+#endif
 static int
 hw_activate(struct captbl *t, capid_t cap, capid_t capin, u32_t irq_lines)
 {
@@ -48,66 +61,29 @@ static int
 hw_deactivate(struct cap_captbl *t, capid_t capin, livenessid_t lid)
 { return cap_capdeactivate(t, capin, CAP_HW, lid); }
 
-/*
+#ifdef DEV_RCV
 static int
-hw_attach_rcvcap(struct cap_hw *hwc, u32_t irqline, capid_t rcvcap)
+hw_attach_rcvcap(struct cap_hw *hwc, hwid_t hwid, struct cap_arcv * rcvc, capid_t rcv_cap)
 {
-	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
-	hw_rcvcap[irqline - 1] = rcvcap;
-	return 0;
+	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
+	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	return asnd_copy(&hw_asnd_caps[hwid - 1], rcvc, rcv_cap, 0, 0);
 }
 
 static int
-hw_detach_rcvcap(struct cap_hw *hwc, u32_t irqline)
+hw_detach_rcvcap(struct cap_hw *hwc, hwid_t hwid)
 {
-	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
-	hw_rcvcap[irqline - 1] = 0;
+	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
+	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	memset(&hw_asnd_caps[hwid - 1], 0, sizeof(struct cap_asnd));
 	return 0;
 }
-*/
-/*static int
-hw_attach_thdcap(struct cap_hw *hwc, u32_t irqline, capid_t thdcap)
-{
-	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
-	hw_thdcap[irqline] = thdcap;
-	return 0;
-}
-
-static int
-hw_detach_thdcap(struct cap_hw *hwc, u32_t irqline)
-{
-	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
-	hw_thdcap[irqline] = 0;
-	return 0;
-}*/
-/*
-static int
-hw_attach_thd(struct cap_hw *hwc, u32_t irqline, struct thread *thd)
-{
-	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
-	hw_thd[irqline - 1] = thd;
-	return 0;
-}
-
-static int
-hw_detach_thd(struct cap_hw *hwc, u32_t irqline)
-{
-	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
-	hw_thd[irqline - 1] = NULL;
-	return 0;
-}*/
-
+#else
 static int
 hw_attach_thd(struct cap_hw *hwc, hwid_t hwid, struct thread *thd)
 {
-	if (hwid < IRQ_LINES_EXTERNAL_MIN || hwid > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (hwid - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
+	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
 	hw_thd[hwid - 1] = thd;
 	return 0;
 }
@@ -115,9 +91,10 @@ hw_attach_thd(struct cap_hw *hwc, hwid_t hwid, struct thread *thd)
 static int
 hw_detach_thd(struct cap_hw *hwc, hwid_t hwid)
 {
-	if (hwid < IRQ_LINES_EXTERNAL_MIN || hwid > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
-	if (!(hwc->hw_bitmap & (1 << (hwid - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
+	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
 	hw_thd[hwid - 1] = NULL;
 	return 0;
 }
+#endif
 #endif /* HW_H */

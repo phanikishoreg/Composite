@@ -27,6 +27,7 @@ WARNINGS += -Wvolatile-register-var
 WARNINGS += -Wwrite-strings
 
 CFLAGS += $(WARNINGS)
+#CFLAGS += -DDEV_RCV
 
 OBJS += kernel.o
 OBJS += gdt.o

@@ -100,11 +100,14 @@ fn##_irq: 			\
 	IRQPROC(fn##_handler)
 
 #define IRQ_ID(ID)		\
-.align 16;			\
+.align 4;			\
 .global handler_hw_##ID;	\
 handler_hw_##ID:		\
 	cli; 			\
 	pushl $(ID);		\
+	jmp irqproc
+
+irqproc:
 	IRQPROC(hw_handler)
 
 .text

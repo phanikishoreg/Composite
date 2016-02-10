@@ -83,7 +83,6 @@ periodic_handler(struct pt_regs *regs)
 	u64_t cycle;
 	int preempt = 1;
 	//capid_t thdcap = hw_thdcap[HW_PERIODIC - 1];
-	struct thread *timer_thd = hw_thd[HW_PERIODIC - 1];
 
 	rdtscll(cycle);
 	tick++;
@@ -91,7 +90,12 @@ periodic_handler(struct pt_regs *regs)
 
 	ack_irq(HW_PERIODIC);
 	/*if (timer_thread) preempt = capinv_int_snd(timer_thread, regs);*/
+#ifndef DEV_RCV
+	struct thread *timer_thd = hw_thd[HW_PERIODIC - 1];
 	if (timer_thd) preempt = capinv_int_snd(timer_thd, regs);
+#else
+	preempt = cap_hw_asnd(&hw_asnd_caps[HW_PERIODIC - 1], regs);
+#endif
 
 	*hpet_interrupt = HPET_INT_ENABLE(TIMER_PERIODIC);
 
@@ -103,14 +107,18 @@ oneshot_handler(struct pt_regs *regs)
 {
 	u64_t cycle;
 	int preempt = 1;
-	struct thread *timer_thd = hw_thd[HW_PERIODIC - 1];
 
 	rdtscll(cycle);
 	printk("o"); /* comment this line for microbenchmarking tests */
 
 	ack_irq(HW_ONESHOT);
 	/*if (timer_thread) preempt = capinv_int_snd(timer_thread, regs);*/
+#ifndef DEV_RCV
+	struct thread *timer_thd = hw_thd[HW_PERIODIC - 1];
 	if (timer_thd) preempt = capinv_int_snd(timer_thd, regs);
+#else
+	preempt = cap_hw_asnd(&hw_asnd_caps[HW_ONESHOT - 1], regs);
+#endif
 
 	*hpet_interrupt = HPET_INT_ENABLE(TIMER_ONESHOT);
 
