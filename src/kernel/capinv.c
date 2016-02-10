@@ -1358,15 +1358,18 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			struct thread *thd;
 			struct cap_hw *hwc;
 
-			u32_t irqline = __userregs_get1(regs);
-			/*capid_t rcvcap = __userregs_get2(regs);*/
+			hwid_t hwid    = __userregs_get1(regs);
 			capid_t thdcap = __userregs_get2(regs);
+			/*capid_t rcvcap = __userregs_get2(regs);*/
+
 			thdc = (struct cap_thd *)captbl_lkup(ci->captbl, thdcap);
 			if (unlikely(!thdc || thdc->h.type != CAP_THD || thdc->cpuid != get_cpuid())) return -EINVAL;
+
 			thd = thdc->t;
+			assert(thd);
 			/* ret = hw_attach_thdcap((struct cap_hw *)ch, irqline, thdcap);*/
 			/* checking thread capability here, anyway! save thread pointer instead */
-			ret = hw_attach_thd((struct cap_hw *)ch, irqline, thd);
+			ret = hw_attach_thd((struct cap_hw *)ch, hwid, thd);
 			/*ret = hw_attach_rcvcap((struct cap_hw *)ch, irqline, rcvcap);*/
 			break;
 		}
@@ -1374,9 +1377,9 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 		{
 			struct cap_hw *hwc;
 
-			u32_t irqline = __userregs_get1(regs);
+			hwid_t hwid = __userregs_get1(regs);
 			/*ret = hw_detach_thdcap((struct cap_hw *)ch, irqline);*/
-			ret = hw_detach_thd((struct cap_hw *)ch, irqline);
+			ret = hw_detach_thd((struct cap_hw *)ch, hwid);
 			/*ret = hw_detach_rcvcap((struct cap_hw *)ch, irqline);*/
 			break;
 		}

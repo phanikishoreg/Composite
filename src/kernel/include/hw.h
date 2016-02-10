@@ -84,7 +84,7 @@ hw_detach_thdcap(struct cap_hw *hwc, u32_t irqline)
 	hw_thdcap[irqline] = 0;
 	return 0;
 }*/
-
+/*
 static int
 hw_attach_thd(struct cap_hw *hwc, u32_t irqline, struct thread *thd)
 {
@@ -100,6 +100,24 @@ hw_detach_thd(struct cap_hw *hwc, u32_t irqline)
 	if (irqline < IRQ_LINES_EXTERNAL_MIN || irqline > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
 	if (!(hwc->hw_bitmap & (1 << (irqline - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
 	hw_thd[irqline - 1] = NULL;
+	return 0;
+}*/
+
+static int
+hw_attach_thd(struct cap_hw *hwc, hwid_t hwid, struct thread *thd)
+{
+	if (hwid < IRQ_LINES_EXTERNAL_MIN || hwid > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
+	if (!(hwc->hw_bitmap & (1 << (hwid - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	hw_thd[hwid - 1] = thd;
+	return 0;
+}
+
+static int
+hw_detach_thd(struct cap_hw *hwc, hwid_t hwid)
+{
+	if (hwid < IRQ_LINES_EXTERNAL_MIN || hwid > IRQ_LINES_EXTERNAL_MAX) return -EINVAL;
+	if (!(hwc->hw_bitmap & (1 << (hwid - IRQ_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	hw_thd[hwid - 1] = NULL;
 	return 0;
 }
 #endif /* HW_H */

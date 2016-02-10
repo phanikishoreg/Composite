@@ -579,12 +579,12 @@ cos_hw_attach(hwcap_t hwc, u32_t irqline, arcvcap_t arcv)
 { return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, irqline, arcv, 0, 0); }*/
 
 int
-cos_hw_attach(hwcap_t hwc, u32_t irqline, thdcap_t thdcap)
-{ return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, irqline, thdcap, 0, 0); }
+cos_hw_attach(hwcap_t hwc, hwid_t hwid, thdcap_t thdcap)
+{ return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, hwid, thdcap, 0, 0); }
 
 int
-cos_hw_detach(hwcap_t hwc, u32_t irqline)
-{ return call_cap_op(hwc, CAPTBL_OP_HW_DETACH, irqline, 0, 0, 0); }
+cos_hw_detach(hwcap_t hwc, hwid_t hwid)
+{ return call_cap_op(hwc, CAPTBL_OP_HW_DETACH, hwid, 0, 0, 0); }
 
 /* TODO: generalize to modify all state */
 int
