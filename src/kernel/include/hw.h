@@ -51,7 +51,9 @@ hw_activate(struct captbl *t, capid_t cap, capid_t capin, u32_t irq_lines)
 
 	hwc = (struct cap_hw *)__cap_capactivate_pre(t, cap, capin, CAP_HW, &ret);
 	if (!hwc) return ret;
+
 	hwc->hw_bitmap = irq_lines;
+
 	__cap_capactivate_post(&hwc->h, CAP_HW);
 
 	return 0;
@@ -67,6 +69,8 @@ hw_attach_rcvcap(struct cap_hw *hwc, hwid_t hwid, struct cap_arcv * rcvc, capid_
 {
 	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
 	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	if (hw_asnd_caps[hwid - 1].h.type == CAP_ASND) return -EEXIST;
+
 	return asnd_copy(&hw_asnd_caps[hwid - 1], rcvc, rcv_cap, 0, 0);
 }
 
@@ -75,7 +79,9 @@ hw_detach_rcvcap(struct cap_hw *hwc, hwid_t hwid)
 {
 	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
 	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
+
 	memset(&hw_asnd_caps[hwid - 1], 0, sizeof(struct cap_asnd));
+
 	return 0;
 }
 #else
@@ -84,7 +90,10 @@ hw_attach_thd(struct cap_hw *hwc, hwid_t hwid, struct thread *thd)
 {
 	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
 	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
+	if (hw_thd[hwid - 1]) return -EEXIST;
+
 	hw_thd[hwid - 1] = thd;
+
 	return 0;
 }
 
@@ -93,7 +102,9 @@ hw_detach_thd(struct cap_hw *hwc, hwid_t hwid)
 {
 	if (hwid < HW_LINES_EXTERNAL_MIN || hwid > HW_LINES_EXTERNAL_MAX) return -EINVAL;
 	if (!(hwc->hw_bitmap & (1 << (hwid - HW_LINES_EXTERNAL_MIN)))) return -EINVAL;
+
 	hw_thd[hwid - 1] = NULL;
+
 	return 0;
 }
 #endif

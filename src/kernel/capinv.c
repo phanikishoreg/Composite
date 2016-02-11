@@ -574,7 +574,11 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 
 	assert(asnd->arcv_capid);
 	/* IPI notification to another core */
-	if (asnd->arcv_cpuid != curr_cpu) return cos_cap_send_ipi(asnd->arcv_cpuid, asnd); 
+	if (asnd->arcv_cpuid != curr_cpu) {
+		cos_cap_send_ipi(asnd->arcv_cpuid, asnd);
+		return preempt;
+	}
+
 	arcv = __cap_asnd_to_arcv(asnd);
 	if (unlikely(!arcv)) return preempt;
 
@@ -1365,22 +1369,24 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 #ifndef DEV_RCV
 			struct cap_thd *thdc;
 			struct thread *thd;
-			capid_t thdcap = __userregs_get2(regs); 
-			hwid_t hwid    = __userregs_get1(regs);
+			capid_t thdcap       = __userregs_get2(regs); 
+			hwid_t hwid          = __userregs_get1(regs);
 
 			thdc = (struct cap_thd *)captbl_lkup(ci->captbl, thdcap);
 			if (unlikely(!thdc || thdc->h.type != CAP_THD || thdc->cpuid != get_cpuid())) return -EINVAL;
 			thd = thdc->t;
 			assert(thd);
+
 			ret = hw_attach_thd((struct cap_hw *)ch, hwid, thd); 
 #else
 			struct cap_arcv *rcvc;
 			struct cap_hw *hwc;
-			capid_t rcvcap = __userregs_get2(regs);
-			hwid_t hwid    = __userregs_get1(regs);
+			capid_t rcvcap        = __userregs_get2(regs);
+			hwid_t hwid           = __userregs_get1(regs);
 
 			rcvc = (struct cap_arcv *)captbl_lkup(ci->captbl, rcvcap);
 			if (unlikely(!rcvc || rcvc->h.type != CAP_ARCV)) return -EINVAL;
+
 			ret = hw_attach_rcvcap((struct cap_hw *)ch, hwid, rcvc, rcvcap);
 #endif
 			break;
@@ -1388,8 +1394,7 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 		case CAPTBL_OP_HW_DETACH:
 		{
 			struct cap_hw *hwc;
-
-			hwid_t hwid = __userregs_get1(regs);
+			hwid_t hwid        = __userregs_get1(regs);
 #ifndef DEV_RCV
 			ret = hw_detach_thd((struct cap_hw *)ch, hwid);
 #else
