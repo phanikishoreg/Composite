@@ -22,3 +22,4 @@ modules.order
 *.img
 transfer/
 *mem_man_parsec.d.*
+*cscope.out

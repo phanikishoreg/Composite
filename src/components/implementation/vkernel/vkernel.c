@@ -15,8 +15,10 @@
 #include <cos_component.h>
 #include <cobj_format.h>
 #include <cos_kernel_api.h>
+#include "vcos_kernel_api.h"
 
 int is_vkernel = 1;
+int test_status = 0;
 
 static void
 cos_llprint(char *s, int len)
@@ -89,7 +91,7 @@ test_thds_perf(void)
 	long long start_swt_cycles = 0, end_swt_cycles = 0;
 	int i;
 
-	ts = cos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn_perf, NULL);
+	ts = vcos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn_perf, NULL);
 	assert(ts);
 	cos_thd_switch(ts);
 
@@ -121,7 +123,7 @@ test_thds(void)
 	int i;
 
 	for (i = 0 ; i < TEST_NTHDS ; i++) {
-		ts[i] = cos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn, (void *)i);
+		ts[i] = vcos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn, (void *)i);
 		assert(ts[i]);
 		tls_test[i] = i;
 		cos_thd_mod(&booter_info, ts[i], &tls_test[i]);
@@ -444,7 +446,7 @@ test_captbl_expand(void)
 }
 
 void
-test_run(void)
+test_run(void *d)
 {
 	printc("\nMicro Booter started.\n");
 
@@ -481,6 +483,7 @@ test_run(void)
 	printc("---------------------------\n");
 
 	printc("\nMicro Booter done.\n");
+	test_status = 1;
 }
 
 void
@@ -499,10 +502,21 @@ cos_init(void)
 
 	if (is_vkernel) { 
 		printc("\nvirtualization layer init\n");
+		is_vkernel = 0;
+#if 0
+		compcap_t cc;
+		thdcap_t vmthd;
+
+		cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)NULL);
+		assert(cc);
+		vmthd = cos_thd_alloc(&booter_info, cc, test_run, NULL);
+		assert(vmthd);
+		printc("here\n");
 		/* initialize virtual kernel component */
 		/* create micro_booter component from here.. and it should "magically" invoke micro_booter */
 
-		is_vkernel = 0;
+		cos_thd_switch(vmthd);
+#endif
 		printc("\n...done.\n");
 	} 
 
@@ -510,7 +524,7 @@ cos_init(void)
 	termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
 	assert(termthd);
 
-	test_run();
+	test_run(NULL);
 	cos_thd_switch(termthd);
 
 	return;

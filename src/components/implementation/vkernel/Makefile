@@ -1,4 +1,4 @@
-C_OBJS=vkernel.o
+C_OBJS=vcos_kernel_api.o vkernel.o
 ASM_OBJS=cos_asm_scheduler.o inv.o
 COMPONENT=vkernel_boot.o
 INTERFACES=
