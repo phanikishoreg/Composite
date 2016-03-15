@@ -19,6 +19,8 @@
 
 int is_vkernel = 1;
 int test_status = 0;
+extern vaddr_t cos_upcall_entry;
+thdcap_t vmthd;
 
 static void
 cos_llprint(char *s, int len)
@@ -112,7 +114,8 @@ thd_fn(void *d)
 	printc("\tNew thread %d with argument %d, capid %ld\n", cos_thdid(), (int)d, tls_test[(int)d]);
 	/* Test the TLS support! */
 	assert(tls_get(0) == tls_test[(int)d]);
-	while (1) cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	//while (1) cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	while (1) cos_thd_switch(vmthd);
 	printc("Error, shouldn't get here!\n");
 }
 
@@ -250,7 +253,7 @@ test_async_endpoints(void)
 
 	printc("Creating threads, and async end-points.\n");
 	/* parent rcv capabilities */
-	tcp = cos_thd_alloc(&booter_info, booter_info.comp_cap, async_thd_parent, (void*)BOOT_CAPTBL_SELF_INITTHD_BASE);
+	tcp = cos_thd_alloc(&booter_info, booter_info.comp_cap, async_thd_parent, (void*)vmthd);
 	assert(tcp);
 	tccp = cos_tcap_split(&booter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 0, 0);
 	assert(tccp);
@@ -455,7 +458,7 @@ test_run(void *d)
 	printc("---------------------------\n");
 	test_thds();
 	printc("---------------------------\n");
-	test_thds_perf();
+//	test_thds_perf();
 	printc("---------------------------\n");
 
 	printc("---------------------------\n");
@@ -469,13 +472,13 @@ test_run(void *d)
 	printc("---------------------------\n");
 	test_async_endpoints();
 	printc("---------------------------\n");
-	test_async_endpoints_perf();
+//	test_async_endpoints_perf();
 	printc("---------------------------\n");
 
 	printc("---------------------------\n");
 	test_inv();
 	printc("---------------------------\n");
-	test_inv_perf();
+//	test_inv_perf();
 	printc("---------------------------\n");
 
 	printc("---------------------------\n");
@@ -484,6 +487,7 @@ test_run(void *d)
 
 	printc("\nMicro Booter done.\n");
 	test_status = 1;
+	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
 }
 
 void
@@ -500,32 +504,32 @@ cos_init(void)
 	cos_compinfo_init(&booter_info, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_COMP,
 			  (vaddr_t)cos_get_heap_ptr(), BOOT_CAPTBL_FREE, &booter_info);
 
+	printc("cos_init\n");
 	if (is_vkernel) { 
 		printc("\nvirtualization layer init\n");
 		is_vkernel = 0;
-#if 0
 		compcap_t cc;
-		thdcap_t vmthd;
+		printc("cos_upcall_entry: %x\n", &cos_upcall_entry);
 
-		cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)NULL);
+		cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)&cos_upcall_entry);
 		assert(cc);
 		vmthd = cos_thd_alloc(&booter_info, cc, test_run, NULL);
 		assert(vmthd);
-		printc("here\n");
 		/* initialize virtual kernel component */
 		/* create micro_booter component from here.. and it should "magically" invoke micro_booter */
 
-		cos_thd_switch(vmthd);
-#endif
-		printc("\n...done.\n");
+		while (test_status == 0)
+			cos_thd_switch(vmthd);
+		printc("\n...done. terminating..\n");
+		/* this part can be removed from this file when we're able to create micro_booter component and run it */
+		termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
+		assert(termthd);
+
+		//test_run(NULL);
+		cos_thd_switch(termthd);
+
 	} 
-
-	/* this part can be removed from this file when we're able to create micro_booter component and run it */
-	termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
-	assert(termthd);
-
-	test_run(NULL);
-	cos_thd_switch(termthd);
+	printc("cos_init end\n");
 
 	return;
 }
