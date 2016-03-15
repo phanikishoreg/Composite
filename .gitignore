@@ -21,5 +21,3 @@ modules.order
 .depend
 *.img
 transfer/
-*mem_man_parsec.d.*
-*cscope.out
