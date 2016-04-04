@@ -66,7 +66,7 @@ cos_init(void)
 		cos_cap_init(&vkern_info, BOOT_CAPTBL_SELF_INITRCV_BASE, &vmbooter_info);
 		cos_cap_init(&vkern_info, BOOT_CAPTBL_SELF_INITHW_BASE, &vmbooter_info);
 
-		vmthd0 = cos_thd_alloc(&vkern_info, vkern_info.comp_cap, test_run, NULL);
+		vmthd0 = cos_thd_alloc(&vkern_info, vmbooter_info.comp_cap, test_run, NULL);
 		vmthd = cos_cap_copy(&vkern_info, vmthd0, CAP_THD, &vmbooter_info);
 		assert(vmthd);
 
