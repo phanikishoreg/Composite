@@ -470,7 +470,12 @@ cos_compinfo_alloc(struct cos_compinfo *ci, vaddr_t heap_ptr, vaddr_t entry,
 	compc = cos_comp_alloc(ci_resources, ctc, ptc, entry);
 	assert(compc);
 
-	cos_compinfo_init(ci, ptc, ctc, compc, heap_ptr, 0, ci_resources);
+	/* 
+	 * FIXME: just a hack for now. 
+	 * 	Just incase we use this API to create Compinfo struct for VM components
+	 * 	and copy/init the BOOTER capabilities like RCV, THD, HW etc in the child
+	 */
+	cos_compinfo_init(ci, ptc, ctc, compc, heap_ptr, BOOT_CAPTBL_FREE, ci_resources);
 
 	return 0;
 }
@@ -548,6 +553,36 @@ cos_hw_alloc(struct cos_compinfo *ci, u32_t bitmap)
 void *
 cos_page_bump_alloc(struct cos_compinfo *ci)
 { return (void*)__page_bump_alloc(ci); }
+
+capid_t
+cos_cap_copy(struct cos_compinfo *ci, capid_t scap, cap_t sctype, struct cos_compinfo *dci)
+{
+	capid_t dcap;
+
+	assert(ci);
+	assert(dci);
+
+	dcap = __capid_bump_alloc(ci, sctype);
+	if (!dcap) return 0;
+	if (call_cap_op(ci->captbl_cap, CAPTBL_OP_CPY, scap, dci->captbl_cap, dcap, 0))  BUG();
+
+	return dcap;
+}
+
+int
+cos_cap_init(struct cos_compinfo *ci, capid_t scap, struct cos_compinfo *dci)
+{
+	capid_t dcap = scap;
+	assert(ci);
+	assert(dci);
+
+	if (!dcap) return 0;
+	/* copying a cap from src to dst at same index */
+	/* mostly applicable for initial capabilities */
+	if (call_cap_op(ci->captbl_cap, CAPTBL_OP_CPY, scap, dci->captbl_cap, dcap, 0))  BUG();
+
+	return 0;
+}
 
 /**************** [Kernel Object Operations] ****************/
 
