@@ -8,10 +8,24 @@
 #include "vcos_kernel_api.h"
 #include <cos_thd_init.h>
 
+extern struct cos_compinfo vkern_info;
+extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args can be passed into SINV */
+
 thdcap_t
 vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *data)
-{ return cos_thd_alloc(ci, comp, fn, data); }
+{ 
+	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
+	assert(sthd);
+	thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
+	assert(dthd);
+	/* FIXME: Doesn't work without copying this cap back to vkern! */
+	cos_cap_init(ci, dthd, &vkern_info);
 
+	printc("sthd: %d, dthd: %d\n", sthd, dthd);
+	return dthd;
+}
+
+/* TODO: Will not support these for Grid computing project */
 thdcap_t
 vcos_initthd_alloc(struct cos_compinfo *ci, compcap_t comp)
 { return cos_initthd_alloc(ci, comp); }
@@ -32,6 +46,7 @@ int
 vcos_compinfo_alloc(struct cos_compinfo *ci, vaddr_t heap_ptr, vaddr_t entry,
 		   struct cos_compinfo *ci_resources)
 { return cos_compinfo_alloc(ci, heap_ptr, entry, ci_resources); }
+/* -------------------------------------------------------*/
 
 sinvcap_t
 vcos_sinv_alloc(struct cos_compinfo *srcci, compcap_t dstcomp, vaddr_t entry)

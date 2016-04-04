@@ -13,11 +13,20 @@ thdcap_t vmthd0;
 struct cos_compinfo vkern_info;
 struct cos_compinfo vmbooter_info;
 thdcap_t termthd; 		/* switch to this to shutdown */
-compcap_t vmcc;
 captblcap_t vmct;
+/* Unused for now!
+compcap_t vmcc;
 pgtblcap_t vmpt;
 arcvcap_t vmrcv;
 tcap_t vmtcp;
+sinvcap_t invthd;
+sinvcap_t invinv;
+sinvcap_t invrcv;
+sinvcap_t invsnd;
+sinvcap_t invcomp;
+sinvcap_t invcaptbl;
+sinvcap_t invpgtbl;
+*/
 
 int
 vkern_api_handler(int a, int b, int c)
@@ -48,12 +57,10 @@ cos_init(void)
 		cos_compinfo_init(&vmbooter_info, BOOT_CAPTBL_SELF_PT, vmct, BOOT_CAPTBL_SELF_COMP,
 			  (vaddr_t)cos_get_heap_ptr(), BOOT_CAPTBL_FREE, &vkern_info);
 		
-		
-		/*if(cos_compinfo_alloc(&vmbooter_info, (vaddr_t)cos_get_heap_ptr(), (vaddr_t)&cos_upcall_entry, &vkern_info) != 0) {
-			printc("failed to allocate a component\n");
-			cos_thd_switch(termthd);
-		}*/
 
+		//cos_compinfo_alloc(&vmbooter_info, (vaddr_t)cos_get_heap_ptr(), &cos_upcall_entry, &vkern_info);
+		//cos_cap_init(&vkern_info, BOOT_CAPTBL_SELF_PT, &vmbooter_info);
+		
 		cos_cap_init(&vkern_info, BOOT_CAPTBL_SELF_INITTHD_BASE, &vmbooter_info);
 		cos_cap_init(&vkern_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, &vmbooter_info);
 		cos_cap_init(&vkern_info, BOOT_CAPTBL_SELF_INITRCV_BASE, &vmbooter_info);
