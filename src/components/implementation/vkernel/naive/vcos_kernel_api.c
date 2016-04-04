@@ -13,7 +13,12 @@ extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args ca
 
 thdcap_t
 vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *data)
-{ 
+{
+	/*
+	 * can't just call cos_thd_alloc in child because child does not have memory
+	 * So we allocate in the vKernel and then move over to the virtualized
+	 * component
+	 */ 
 	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
 	assert(sthd);
 	thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
