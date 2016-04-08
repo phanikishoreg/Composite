@@ -14,12 +14,21 @@ extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args ca
 thdcap_t
 vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *data)
 { 
+
+	/* 
+	 * TODO: sinv to vkern component
+	 * vkern component cos_thd_alloc
+	 * vkern comp copies that cap to ci comp
+	 * returns the capid
+	 */
 	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
 	assert(sthd);
-	thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
-	assert(dthd);
+	thdcap_t dthd = sthd;
+	cos_cap_init(&vkern_info, sthd, ci, sthd);
+	//thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
+	//assert(dthd);
 	/* FIXME: Doesn't work without copying this cap back to vkern! */
-	cos_cap_init(ci, dthd, &vkern_info);
+	//cos_cap_init(ci, dthd, &vkern_info, dthd);
 
 	printc("sthd: %d, dthd: %d\n", sthd, dthd);
 	return dthd;

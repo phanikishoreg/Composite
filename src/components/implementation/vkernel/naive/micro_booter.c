@@ -121,13 +121,17 @@ test_thds(void)
 {
 	thdcap_t ts[TEST_NTHDS];
 	int i;
+	printc("here..\n");
+	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	printc("here too\n");
 
 	for (i = 0 ; i < TEST_NTHDS ; i++) {
 		ts[i] = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn, (void *)i);
 		assert(ts[i]);
 		tls_test[i] = i;
 		//cos_thd_mod(&vmbooter_info, ts[i], &tls_test[i]);
-		printc("switchto %d @ %x\n", (int)ts[i], cos_introspect(&vmbooter_info, ts[i], 0));
+		//printc("switchto %d @ %x\n", (int)ts[i], cos_introspect(&vmbooter_info, ts[i], 0));
+		printc("switchto %d\n", (int)ts[i]);
 		cos_thd_switch(ts[i]);
 	}
 
