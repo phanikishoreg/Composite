@@ -250,6 +250,8 @@ __capid_bump_alloc(struct cos_compinfo *ci, cap_t cap)
 
 	printd("__capid_bump_alloc\n");
 
+	assert(ci);
+
 	switch(sz) {
 	case CAP16B_IDSZ:
 		frontier = &ci->cap16_frontier;

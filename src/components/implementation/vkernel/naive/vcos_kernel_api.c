@@ -8,8 +8,47 @@
 #include "vcos_kernel_api.h"
 #include <cos_thd_init.h>
 
+
 extern struct cos_compinfo vkern_info;
 extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args can be passed into SINV */
+extern void* __inv_vkern_thd_alloc(int a, int b, int c);
+
+thdcap_t
+__vcos_thd_alloc(int a, int b, int c)
+{
+	printc("in __vcos_thd_alloc\n");
+	return 3;
+}
+
+static inline
+int call_cap_mb(u32_t cap_no, int arg1, int arg2, int arg3)
+{
+	int ret;
+
+	/*
+	 * Which stack should we use for this invocation?  Simple, use
+	 * this stack, at the current sp.  This is essentially a
+	 * function call into another component, with odd calling
+	 * conventions.
+	 */
+	printc("a %d %d\n", cap_no, COS_CAPABILITY_OFFSET);
+	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+	printc("b %d\n", cap_no);
+
+	__asm__ __volatile__( \
+		"pushl %%ebp\n\t" \
+		"movl %%esp, %%ebp\n\t" \
+		"movl %%esp, %%edx\n\t" \
+		"movl $1f, %%ecx\n\t" \
+		"sysenter\n\t" \
+		"1:\n\t" \
+		"popl %%ebp" \
+		: "=a" (ret)
+		: "a" (cap_no), "b" (arg1), "S" (arg2), "D" (arg3) \
+		: "memory", "cc", "ecx", "edx");
+
+	return ret;
+}
 
 thdcap_t
 vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *data)
@@ -18,15 +57,35 @@ vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *d
 	 * can't just call cos_thd_alloc in child because child does not have memory
 	 * So we allocate in the vKernel and then move over to the virtualized
 	 * component
-	 */ 
+	 */
+
+	// make a new component until we have the virtualized component
+	compcap_t new_comp = cos_comp_alloc(&vkern_info, vkern_info.captbl_cap, vkern_info.pgtbl_cap, (vaddr_t) NULL);
+	assert(new_comp > 0);
+	 
+	// sinv to method that calls cos_thd_alloc (or cos_thd_alloc itself?)
+	// then that does an sinv back
+	sinvcap_t ic = cos_sinv_alloc(&vkern_info, new_comp, (vaddr_t) __inv_vkern_thd_alloc);
+	assert(ic > 0);
+	//sinvcap_t ic2 = cos_cap_copy(&vkern_info, ic, CAP_COMP, &new_comp);
+	//assert(ic2);
+
+	printc("1.5\n");
+	unsigned int r = call_cap_mb(ic, 1, 2, 3);
+	printc("sinchronous invocation %d\n", r);
+	
 	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
+	printc("2\n");
+
+	// then proceed as normal
 	assert(sthd);
 	thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
 	assert(dthd);
 	/* FIXME: Doesn't work without copying this cap back to vkern! */
 	cos_cap_init(ci, dthd, &vkern_info);
 
-	printc("sthd: %d, dthd: %d\n", sthd, dthd);
+	printc("sthd: %ld, dthd: %ld\n", (long int) sthd, (long int) dthd);
+	
 	return dthd;
 }
 
