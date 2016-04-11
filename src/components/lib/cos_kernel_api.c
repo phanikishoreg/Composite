@@ -572,15 +572,12 @@ cos_cap_copy(struct cos_compinfo *ci, capid_t scap, cap_t sctype, struct cos_com
 }
 
 int
-cos_cap_init(struct cos_compinfo *ci, capid_t scap, struct cos_compinfo *dci)
+cos_cap_init(struct cos_compinfo *ci, capid_t scap, struct cos_compinfo *dci, capid_t dcap)
 {
-	capid_t dcap = scap;
 	assert(ci);
 	assert(dci);
 
 	if (!dcap) return 0;
-	/* copying a cap from src to dst at same index */
-	/* mostly applicable for initial capabilities */
 	if (call_cap_op(ci->captbl_cap, CAPTBL_OP_CPY, scap, dci->captbl_cap, dcap, 0))  BUG();
 
 	return 0;

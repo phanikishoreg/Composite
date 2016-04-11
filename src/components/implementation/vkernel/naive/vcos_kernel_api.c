@@ -79,10 +79,12 @@ vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *d
 
 	// then proceed as normal
 	assert(sthd);
-	thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
-	assert(dthd);
+	thdcap_t dthd = sthd;
+	cos_cap_init(&vkern_info, sthd, ci, sthd);
+	//thdcap_t dthd = cos_cap_copy(&vkern_info, sthd, CAP_THD, ci);
+	//assert(dthd);
 	/* FIXME: Doesn't work without copying this cap back to vkern! */
-	cos_cap_init(ci, dthd, &vkern_info);
+	//cos_cap_init(ci, dthd, &vkern_info, dthd);
 
 	printc("sthd: %ld, dthd: %ld\n", (long int) sthd, (long int) dthd);
 	
