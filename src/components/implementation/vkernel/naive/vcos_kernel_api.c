@@ -11,17 +11,26 @@
 
 extern struct cos_compinfo vkern_info;
 extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args can be passed into SINV */
-extern void* __inv_vkern_thd_alloc(int a, int b, int c);
+extern void* __inv_vkern_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data);
 
 thdcap_t
-__vcos_thd_alloc(int a, int b, int c)
+__vcos_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data)
 {
-	printc("in __vcos_thd_alloc\n");
-	return 3;
+	//compcap_t comp = stash >> 16;
+	//printc("after stashing: %d\n", comp);
+	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
+	assert(sthd);
+
+	// then proceed as normal
+	thdcap_t dthd = sthd;
+	cos_cap_init(&vkern_info, sthd, &vmbooter_info, sthd);
+
+	printc("in __vcos... dthd = %d\n", dthd);
+	return dthd;
 }
 
 static inline
-int call_cap_mb(u32_t cap_no, int arg1, int arg2, int arg3)
+int call_cap_mb(u32_t cap_no, struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *data)
 {
 	int ret;
 
@@ -32,6 +41,11 @@ int call_cap_mb(u32_t cap_no, int arg1, int arg2, int arg3)
 	 * conventions.
 	 */
 	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+	//printc("%d\n", comp);
+	//long stash;
+	//stash = 0;
+	//stash = cap_no << 16 | (comp & 0xFFFF);
+	//printc("before stashing: %d\n", comp);
 
 	__asm__ __volatile__( \
 		"pushl %%ebp\n\t" \
@@ -42,7 +56,7 @@ int call_cap_mb(u32_t cap_no, int arg1, int arg2, int arg3)
 		"1:\n\t" \
 		"popl %%ebp" \
 		: "=a" (ret)
-		: "a" (cap_no), "b" (arg1), "S" (arg2), "D" (arg3) \
+		: "a" (cap_no), "b" (comp), "S" (fn), "D" (data) \
 		: "memory", "cc", "ecx", "edx");
 
 	return ret;
@@ -63,17 +77,8 @@ vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *d
 	sinvcap_t ic = cos_sinv_alloc(&vkern_info, comp, (vaddr_t) __inv_vkern_thd_alloc);
 	assert(ic > 0);
 
-	unsigned int r = call_cap_mb(ic, 1, 2, 3);
-	printc("sinchronous invocation %d\n", r);
-	
-	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
-	assert(sthd);
-
-	// then proceed as normal
-	thdcap_t dthd = sthd;
-	cos_cap_init(&vkern_info, sthd, ci, sthd);
-
-	printc("sthd: %ld, dthd: %ld\n", (long int) sthd, (long int) dthd);
+	thdcap_t dthd = call_cap_mb(ic, ci, comp, fn, data);
+	printc("sinchronous invocation %d\n", dthd);
 	
 	return dthd;
 }
