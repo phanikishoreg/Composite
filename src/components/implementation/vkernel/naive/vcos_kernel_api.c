@@ -11,7 +11,7 @@
 
 extern struct cos_compinfo vkern_info;
 extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args can be passed into SINV */
-extern void* __inv_vkern_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data);
+extern void* thd_alloc_inv(compcap_t comp, cos_thd_fn_t fn, void *data);
 
 thdcap_t
 __vcos_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data)
@@ -74,7 +74,7 @@ vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *d
 
 	// sinv to method that calls cos_thd_alloc (or cos_thd_alloc itself?)
 	// then that does an sinv back
-	sinvcap_t ic = cos_sinv_alloc(&vkern_info, comp, (vaddr_t) __inv_vkern_thd_alloc);
+	sinvcap_t ic = cos_sinv_alloc(&vkern_info, comp, (vaddr_t) thd_alloc_inv);
 	assert(ic > 0);
 
 	thdcap_t dthd = call_cap_mb(ic, ci, comp, fn, data);
