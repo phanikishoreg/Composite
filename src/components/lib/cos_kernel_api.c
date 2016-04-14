@@ -362,7 +362,7 @@ __alloc_mem_cap(struct cos_compinfo *ci, cap_t ct, vaddr_t *kmem, capid_t *cap)
 	printd("__alloc_mem_cap\n");
 
 	*kmem = __kmem_bump_alloc(ci);
-	if (!*kmem)   return -1;
+	if (!*kmem) return -1;
 	*cap  = __capid_bump_alloc(ci, ct);
 	if (!*cap) return -1;
 	return 0;
@@ -645,11 +645,11 @@ cos_introspect(struct cos_compinfo *ci, capid_t cap, unsigned long op)
 static tcap_t
 __cos_tcap_alloc(struct cos_compinfo *ci, tcap_t src, tcap_split_flags_t flags)
 {
+	printd("__cos_tcap_alloc\n");
 	vaddr_t kmem;
 	capid_t cap;
 
-	printd("cos_tcap_alloc\n");
-	assert (ci);
+	assert(ci);
 
 	if (__alloc_mem_cap(ci, CAP_TCAP, &kmem, &cap)) return 0;
 
@@ -667,7 +667,7 @@ cos_tcap_split(struct cos_compinfo *ci, tcap_t src, tcap_res_t res, tcap_prio_t 
 	tcap_t ret;
 
 	ret = __cos_tcap_alloc(ci, src, flags);
-	if (res != 0 && ret > 0 &&
+	if (ret > 0 && 
 	    call_cap_op(src, CAPTBL_OP_TCAP_TRANSFER, ret, res, prio_higher, prio_lower)) return 0;
 
 	return ret;

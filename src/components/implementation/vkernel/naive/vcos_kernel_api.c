@@ -8,16 +8,14 @@
 #include "vcos_kernel_api.h"
 #include <cos_thd_init.h>
 
-
 extern struct cos_compinfo vkern_info;
 extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args can be passed into SINV */
 extern void* thd_alloc_inv(compcap_t comp, cos_thd_fn_t fn, void *data);
+extern void* arcv_alloc_inv(thdcap_t thdcap, tcap_t tcapcap, compcap_t comp, arcvcap_t arcvcap);
 
 thdcap_t
 __vcos_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data)
 {
-	//compcap_t comp = stash >> 16;
-	//printc("after stashing: %d\n", comp);
 	thdcap_t sthd = cos_thd_alloc(&vkern_info, comp, fn, data);
 	assert(sthd);
 
@@ -25,7 +23,6 @@ __vcos_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data)
 	thdcap_t dthd = sthd;
 	cos_cap_init(&vkern_info, sthd, &vmbooter_info, sthd);
 
-	printc("in __vcos... dthd = %d\n", dthd);
 	return dthd;
 }
 
@@ -41,11 +38,6 @@ int call_cap_mb(u32_t cap_no, struct cos_compinfo *ci, compcap_t comp, cos_thd_f
 	 * conventions.
 	 */
 	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
-	//printc("%d\n", comp);
-	//long stash;
-	//stash = 0;
-	//stash = cap_no << 16 | (comp & 0xFFFF);
-	//printc("before stashing: %d\n", comp);
 
 	__asm__ __volatile__( \
 		"pushl %%ebp\n\t" \
@@ -78,7 +70,6 @@ vcos_thd_alloc(struct cos_compinfo *ci, compcap_t comp, cos_thd_fn_t fn, void *d
 	assert(ic > 0);
 
 	thdcap_t dthd = call_cap_mb(ic, ci, comp, fn, data);
-	printc("sinchronous invocation %d\n", dthd);
 	
 	return dthd;
 }
@@ -111,12 +102,66 @@ vcos_sinv_alloc(struct cos_compinfo *srcci, compcap_t dstcomp, vaddr_t entry)
 { return cos_sinv_alloc(srcci, dstcomp, entry); }
 
 arcvcap_t
-vcos_arcv_alloc(struct cos_compinfo *ci, thdcap_t thdcap, tcap_t tcapcap, compcap_t compcap, arcvcap_t arcvcap)
-{ return cos_arcv_alloc(ci, thdcap, tcapcap, compcap, arcvcap); }
+__vcos_arcv_alloc(long stash1, compcap_t comp, arcvcap_t arcvcap)
+{
+	thdcap_t thdcap   = stash1 >> 16;
+	tcap_t tcapcap    = stash1 & 0x0000FFFF;
+
+	//printc("after stashing: %d\n", comp);
+	arcvcap_t cap = cos_arcv_alloc(&vkern_info, thdcap, tcapcap, comp, arcvcap);
+	assert(cap);
+
+	cos_cap_init(&vkern_info, cap, &vmbooter_info, cap);
+
+	return cap;
+}
+
+static inline
+int call_cap_mb_5(u32_t cap_no, thdcap_t thdcap, tcap_t tcapcap, compcap_t comp, arcvcap_t arcvcap)
+{
+	int ret;
+
+	long stash1;
+	stash1 = 0;
+	stash1 = thdcap << 16 | tcapcap;
+	printc("before stashing: %d %d\n", thdcap, tcapcap);
+	printc("s1 %ld\n", stash1);
+
+	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+
+	__asm__ __volatile__( \
+		"pushl %%ebp\n\t" \
+		"movl %%esp, %%ebp\n\t" \
+		"movl %%esp, %%edx\n\t" \
+		"movl $1f, %%ecx\n\t" \
+		"sysenter\n\t" \
+		"1:\n\t" \
+		"popl %%ebp" \
+		: "=a" (ret)
+		: "a" (cap_no), "b" (stash1), "S" (comp), "D" (arcvcap) \
+		: "memory", "cc", "ecx", "edx");
+
+	return ret;
+}
+
+arcvcap_t
+vcos_arcv_alloc(struct cos_compinfo *ci, thdcap_t thdcap, tcap_t tcapcap, compcap_t comp, arcvcap_t arcvcap)
+{ 
+	assert(ci && thdcap && comp);
+	sinvcap_t ic = cos_sinv_alloc(&vkern_info, comp, (vaddr_t) arcv_alloc_inv);
+	assert(ic > 0);
+	
+	arcvcap_t cap = call_cap_mb_5(ic, thdcap, tcapcap, comp, arcvcap);
+	return cap;
+}
 
 asndcap_t
 vcos_asnd_alloc(struct cos_compinfo *ci, arcvcap_t arcvcap, captblcap_t ctcap)
-{ return cos_asnd_alloc(ci, arcvcap, ctcap); }
+{
+	asndcap_t cap = cos_asnd_alloc(&vkern_info, arcvcap, ctcap); 
+	cos_cap_init(&vkern_info, cap, ci, cap);
+	return cap;
+}
 
 hwcap_t
 vcos_hw_alloc(struct cos_compinfo *ci, u32_t bitmap)
@@ -126,3 +171,12 @@ void *
 vcos_page_bump_alloc(struct cos_compinfo *ci)
 { return cos_page_bump_alloc(ci); }
 
+tcap_t
+vcos_tcap_split(struct cos_compinfo *ci, tcap_t src, tcap_res_t res, tcap_prio_t prio, tcap_split_flags_t flags)
+{
+	tcap_t ret = cos_tcap_split(&vkern_info, src, res, prio, flags);	
+
+	cos_cap_init(&vkern_info, ret, ci, ret);
+
+	return ret;
+}

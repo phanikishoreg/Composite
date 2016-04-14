@@ -81,6 +81,7 @@ thd_fn_perf(void *d)
 		cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
 	}
 	printc("Error, shouldn't get here!\n");
+	// then why do we not have assert(0) here???
 }
 
 static void
@@ -91,7 +92,7 @@ test_thds_perf(void)
 	long long start_swt_cycles = 0, end_swt_cycles = 0;
 	int i;
 
-	ts = cos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn_perf, NULL);
+	ts = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn_perf, NULL);
 	assert(ts);
 	cos_thd_switch(ts);
 
@@ -121,16 +122,12 @@ test_thds(void)
 {
 	thdcap_t ts[TEST_NTHDS];
 	int i;
-	printc("here..\n");
 	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
-	printc("here too\n");
 
 	for (i = 0 ; i < TEST_NTHDS ; i++) {
 		ts[i] = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn, (void *)i);
 		assert(ts[i]);
 		tls_test[i] = i;
-		//cos_thd_mod(&vmbooter_info, ts[i], &tls_test[i]);
-		//printc("switchto %d @ %x\n", (int)ts[i], cos_introspect(&vmbooter_info, ts[i], 0));
 		printc("switchto %d\n", (int)ts[i]);
 		cos_thd_switch(ts[i]);
 	}
@@ -271,23 +268,24 @@ test_async_endpoints(void)
 
 	printc("Creating threads, and async end-points.\n");
 	/* parent rcv capabilities */
-	tcp = cos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, async_thd_parent, (void*)BOOT_CAPTBL_SELF_INITTHD_BASE);
+	tcp = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, async_thd_parent, (void*)BOOT_CAPTBL_SELF_INITTHD_BASE);
 	assert(tcp);
-	tccp = cos_tcap_split(&vmbooter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 0, 0);
+	printc("---------------------------------------------------\n");
+	tccp = vcos_tcap_split(&vmbooter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 0, 0);
 	assert(tccp);
-	rcp = cos_arcv_alloc(&vmbooter_info, tcp, tccp, vmbooter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+	rcp = vcos_arcv_alloc(&vmbooter_info, tcp, tccp, vmbooter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
 	assert(rcp);
 
 	/* child rcv capabilities */
-	tcc = cos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, async_thd_fn, (void*)tcp);
+	tcc = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, async_thd_fn, (void*)tcp);
 	assert(tcc);
-	tccc = cos_tcap_split(&vmbooter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 1, 0);
+	tccc = vcos_tcap_split(&vmbooter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 1, 0);
 	assert(tccc);
-	rcc = cos_arcv_alloc(&vmbooter_info, tcc, tccc, vmbooter_info.comp_cap, rcp);
+	rcc = vcos_arcv_alloc(&vmbooter_info, tcc, tccc, vmbooter_info.comp_cap, rcp);
 	assert(rcc);
 
 	/* make the snd channel to the child */
-	scp_global = cos_asnd_alloc(&vmbooter_info, rcc, vmbooter_info.captbl_cap);
+	scp_global = vcos_asnd_alloc(&vmbooter_info, rcc, vmbooter_info.captbl_cap);
 	assert(scp_global);
 
 	rcc_global = rcc;
@@ -482,8 +480,8 @@ test_run(void *d)
 	printc("---------------------------\n");
 	test_thds();
 	printc("---------------------------\n");
-//	test_thds_perf();
-//	printc("---------------------------\n");
+	test_thds_perf();
+	printc("---------------------------\n");
 //
 //	printc("---------------------------\n");
 //	test_timer();
@@ -493,9 +491,9 @@ test_run(void *d)
 //	test_mem();
 //	printc("---------------------------\n");
 //
-//	printc("---------------------------\n");
-//	test_async_endpoints();
-//	printc("---------------------------\n");
+	printc("---------------------------\n");
+	test_async_endpoints();
+	printc("---------------------------\n");
 //	test_async_endpoints_perf();
 //	printc("---------------------------\n");
 //

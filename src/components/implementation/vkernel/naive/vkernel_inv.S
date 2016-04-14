@@ -6,7 +6,7 @@
 .text
 vkern_stub(thd_alloc, __vcos_thd_alloc)
 //vkern_stub(pgtblcap_t vmpt;
-//arcvcap_t vmrcv;
+vkern_stub(arcv_alloc, __vcos_arcv_alloc) 
 //tcap_t vmtcp;
 //sinvcap_t invthd;
 //sinvcap_t invinv;
@@ -29,17 +29,3 @@ __inv_vkern_fn:
         movl %eax, %ecx
         movl $RET_CAP, %eax
         sysenter;
-
-//.globl __inv_vkern_thd_alloc
-//.type  __inv_vkern_thd_alloc, @function
-//__inv_vkern_thd_alloc:
-//	movl %ebp, %esp
-//	xor %ebp, %ebp
-//        pushl %edi
-//        pushl %esi
-//        pushl %ebx
-//        call __vcos_thd_alloc
-//        addl $12, %esp
-//        movl %eax, %ecx
-//        movl $RET_CAP, %eax
-//        sysenter;
