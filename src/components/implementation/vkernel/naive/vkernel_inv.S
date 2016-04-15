@@ -8,6 +8,7 @@ vkern_stub(thd_alloc, __vcos_thd_alloc)
 //vkern_stub(pgtblcap_t vmpt;
 vkern_stub(arcv_alloc, __vcos_arcv_alloc) 
 vkern_stub(tcap_split, __vcos_tcap_split)
+vkern_stub(asnd_alloc, __vcos_asnd_alloc)
 //sinvcap_t invthd;
 //sinvcap_t invinv;
 //sinvcap_t invrcv;

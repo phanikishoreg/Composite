@@ -13,6 +13,8 @@ extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args ca
 extern void* thd_alloc_inv(compcap_t comp, cos_thd_fn_t fn, void *data);
 extern void* arcv_alloc_inv(thdcap_t thdcap, tcap_t tcapcap, compcap_t comp, arcvcap_t arcvcap);
 extern void* tcap_split_inv(long stash, tcap_prio_t prio, tcap_split_flags_t flags);
+extern void* asnd_alloc_inv(arcvcap_t arcvcap, captblcap_t cap, int junk);
+
 
 thdcap_t
 __vcos_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data)
@@ -125,8 +127,6 @@ int call_cap_mb_5(u32_t cap_no, thdcap_t thdcap, tcap_t tcapcap, compcap_t comp,
 	long stash1;
 	stash1 = 0;
 	stash1 = thdcap << 16 | tcapcap;
-	printc("before stashing: %d %d\n", thdcap, tcapcap);
-	printc("s1 %ld\n", stash1);
 
 	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
 
@@ -157,10 +157,45 @@ vcos_arcv_alloc(struct cos_compinfo *ci, thdcap_t thdcap, tcap_t tcapcap, compca
 }
 
 asndcap_t
+__vcos_asnd_alloc(arcvcap_t arcvcap, captblcap_t cap, int junk)
+{
+	asndcap_t ret = cos_asnd_alloc(&vkern_info, arcvcap, cap);
+	assert(ret);
+
+	// move this to the vmbooter info (init doesn't reallocate memory)
+	cos_cap_init(&vkern_info, ret, &vmbooter_info, ret);
+	return ret;
+}
+
+static inline
+int call_cap_mb_asnd(u32_t cap_no, arcvcap_t arcvcap, captblcap_t cap)
+{
+	int ret;
+	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+
+	__asm__ __volatile__( \
+		"pushl %%ebp\n\t" \
+		"movl %%esp, %%ebp\n\t" \
+		"movl %%esp, %%edx\n\t" \
+		"movl $1f, %%ecx\n\t" \
+		"sysenter\n\t" \
+		"1:\n\t" \
+		"popl %%ebp" \
+		: "=a" (ret)
+		: "a" (cap_no), "b" (arcvcap), "S" (cap), "D" (0) \
+		: "memory", "cc", "ecx", "edx");
+	
+	return ret;
+}
+
+asndcap_t
 vcos_asnd_alloc(struct cos_compinfo *ci, arcvcap_t arcvcap, captblcap_t ctcap)
 {
-	asndcap_t cap = cos_asnd_alloc(&vkern_info, arcvcap, ctcap); 
-	cos_cap_init(&vkern_info, cap, ci, cap);
+	assert(ci && arcvcap && ctcap); // sure, why not
+	sinvcap_t ic = cos_sinv_alloc(&vkern_info, vkern_info.comp_cap, (vaddr_t) asnd_alloc_inv);
+	assert(ic > 0);
+	
+	tcap_t cap = call_cap_mb_asnd(ic, arcvcap, ctcap);
 	return cap;
 }
 
