@@ -12,6 +12,7 @@ extern struct cos_compinfo vkern_info;
 extern struct cos_compinfo vmbooter_info; /* FIXME: because only limited args can be passed into SINV */
 extern void* thd_alloc_inv(compcap_t comp, cos_thd_fn_t fn, void *data);
 extern void* arcv_alloc_inv(thdcap_t thdcap, tcap_t tcapcap, compcap_t comp, arcvcap_t arcvcap);
+extern void* tcap_split_inv(long stash, tcap_prio_t prio, tcap_split_flags_t flags);
 
 thdcap_t
 __vcos_thd_alloc(compcap_t comp, cos_thd_fn_t fn, void *data)
@@ -172,11 +173,49 @@ vcos_page_bump_alloc(struct cos_compinfo *ci)
 { return cos_page_bump_alloc(ci); }
 
 tcap_t
+__vcos_tcap_split(long stash, tcap_t src, tcap_split_flags_t flags)
+{
+	tcap_res_t res   = stash >> 16;
+	tcap_prio_t prio = stash & 0x0000FFFF;
+
+	tcap_t cap = cos_tcap_split(&vkern_info, src, res, prio, flags);
+	assert(cap);
+	cos_cap_init(&vkern_info, cap, &vmbooter_info, cap);
+	
+	return cap;
+}
+
+static inline
+int call_cap_mb_split(u32_t cap_no, tcap_t src, tcap_res_t res, tcap_prio_t prio, tcap_split_flags_t flags)
+{
+	int ret;
+	long stash = 0;
+	stash = res << 16 | prio;
+
+	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+
+	__asm__ __volatile__( \
+		"pushl %%ebp\n\t" \
+		"movl %%esp, %%ebp\n\t" \
+		"movl %%esp, %%edx\n\t" \
+		"movl $1f, %%ecx\n\t" \
+		"sysenter\n\t" \
+		"1:\n\t" \
+		"popl %%ebp" \
+		: "=a" (ret)
+		: "a" (cap_no), "b" (stash), "S" (src), "D" (flags) \
+		: "memory", "cc", "ecx", "edx");
+	
+	return ret;
+}
+
+tcap_t
 vcos_tcap_split(struct cos_compinfo *ci, tcap_t src, tcap_res_t res, tcap_prio_t prio, tcap_split_flags_t flags)
 {
-	tcap_t ret = cos_tcap_split(&vkern_info, src, res, prio, flags);	
-
-	cos_cap_init(&vkern_info, ret, ci, ret);
-
-	return ret;
+	assert(ci && src && res); // sure, why not
+	sinvcap_t ic = cos_sinv_alloc(&vkern_info, vkern_info.comp_cap, (vaddr_t) tcap_split_inv);
+	assert(ic > 0);
+	
+	tcap_t cap = call_cap_mb_split(ic, src, res, prio, flags);
+	return cap;
 }
