@@ -30,5 +30,6 @@ hwcap_t vcos_hw_alloc(struct cos_compinfo *ci, u32_t bitmap);
 
 void *vcos_page_bump_alloc(struct cos_compinfo *ci);
 /* TODO: TCaps! */
+tcap_t vcos_tcap_split(struct cos_compinfo *ci, tcap_t src, tcap_res_t res, tcap_prio_t prio, tcap_split_flags_t flags);
 
 #endif /* VCOS_KERNEL_API_H */
