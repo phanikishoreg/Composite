@@ -8,10 +8,12 @@ ENTRY (loader)
 phys = 0x00100000;  		/* This should be COS_MEM_KERN_PA */
 SECTIONS {
 
-    . = 0xc0100000;		/* This should be COS_MEM_KERN_START_VA + COS_MEM_KERN_PA */
+    . = 0xc0100000;	/* This should be COS_MEM_KERN_START_VA + COS_MEM_KERN_PA */
+/*    . = 0xc0100000;	*/	/* This should be COS_MEM_KERN_START_VA + COS_MEM_KERN_PA */
     
     .text : AT(phys) {
         code = .;
+	/*	*(.multiboot)*/
         *(.text)
         *(.rodata)
         . = ALIGN(4096);

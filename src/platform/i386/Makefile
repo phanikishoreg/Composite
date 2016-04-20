@@ -42,7 +42,9 @@ OBJS += serial.o
 OBJS += timer.o
 OBJS += chal.o
 OBJS += boot_comp.o
+#OBJS += screen.o
 #OBJS += console.o
+OBJS += vga.o
 
 COS_OBJ += pgtbl.o
 COS_OBJ += retype_tbl.o
@@ -52,21 +54,39 @@ COS_OBJ += measurement.o
 COS_OBJ += captbl.o
 COS_OBJ += per_cpu.o
 
+LLLLDFLAGS += -m $(shell $(LD) -V | grep elf_i386 2>/dev/null)
+OBJCOPY = $(TOOLPREFIX)objcopy
+OBJDUMP = $(TOOLPREFIX)objdump
+
 DEPS :=$(patsubst %.o, %.d, $(OBJS))
 
 OBJS += $(COS_OBJ)
 
-all: $(KERNEL)
+all: $(KERNEL) composite_bootsec.img
 
-$(KERNEL): linker.ld $(DEPS) $(OBJS) loader.o
+$(KERNEL): linker.ld $(DEPS) $(OBJS) loader2.o
 	$(info |     [LD]   Linking $@)
-	$(LD) -T linker.ld loader.o asm.o entry.o $(OBJS) -o $@
+	$(LD) -T linker.ld loader2.o asm.o entry.o $(OBJS) -o $@
 
-loader.o: loader.S interrupt.s entry.S
+bootblock: bootasm.S bootmain.c
+	$(CC) $(CFLAGS) -fno-pic -O -nostdinc -I. -c bootmain.c
+	$(CC) $(CFLAGS) -fno-pic -nostdinc -I. -c bootasm.S
+	$(LD) $(LLLLDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o bootmain.o
+#	$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o bootmain.o
+	$(OBJDUMP) -S bootblock.o > bootblock.asm
+	$(OBJCOPY) -S -O binary -j .text bootblock.o bootblock
+	./sign.pl bootblock
+
+composite_bootsec.img: bootblock $(KERNEL)
+	dd if=/dev/zero of=xv6.img count=1000
+	dd if=bootblock of=xv6.img conv=notrunc
+	dd if=$(KERNEL) of=xv6.img seek=1 conv=notrunc
+
+loader2.o: loader2.S interrupt.s entry.S
 	$(info |     [AS]   Assembling $@)
 	@$(AS) -c -o asm.o interrupt.s
 	@$(CC) -c -I$(INCPATH) entry.S
-	@$(CC) -c -I$(INCPATH) loader.S
+	@$(CC) -c -I$(INCPATH) loader2.S
 
 %.d: %.c
 	@$(CC) -M -MT $(patsubst %.d, %.o, $@) $(CFLAGS) $(LDFLAGS) $< -o $@
@@ -107,7 +127,7 @@ captbl.o: ../../kernel/captbl.c
 clean:
 	@rm -f *.d *.o $(KERNEL)
 
-cp: $(KERNEL)
+cp: $(KERNEL) xv6.img
 	$(info |     [CP]   Copying native booter to $(TRANS_DIR))
-	@cp -f $(KERNEL) .gdbinit qemu.sh qemu2.sh qemu-g.sh ppos.sh $(TRANS_DIR)
+	@cp -f $(KERNEL) .gdbinit qemu.sh qemu2.sh qemu-g.sh ppos.sh xv6.img $(TRANS_DIR)
 	@cp runscripts/*.sh $(TRANS_DIR)

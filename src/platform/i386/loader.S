@@ -3,12 +3,15 @@
 
 .set MULTIBOOT_PAGE_ALIGN,  1<<0
 .set MULTIBOOT_MEMINFO,     1<<1
+.set MULTIBOOT_MODSINFO,    1<<3
+.set MULTIBOOT_MMAPINFO,    1<<6
 .set MULTIBOOT_AOUT_KLUDGE, 1<<16
 .set MULTIBOOT_MAGIC,       0x1BADB002
-.set MULTIBOOT_FLAGS,       MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMINFO
+.set MULTIBOOT_FLAGS,       MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMINFO | MULTIBOOT_MMAPINFO
 .set MULTIBOOT_CHECKSUM,    -(MULTIBOOT_MAGIC + MULTIBOOT_FLAGS)
 
-.align 64
+.section .multiboot
+.align 4
 .long MULTIBOOT_MAGIC
 .long MULTIBOOT_FLAGS
 .long MULTIBOOT_CHECKSUM
@@ -39,4 +42,3 @@ _loader:
 	pushl $0  /* empty return value as we're jmping, not calling */
 	mov $kmain, %eax
 	jmp *%eax
-

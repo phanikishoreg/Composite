@@ -40,10 +40,18 @@ struct multiboot {
 	u32_t apm_table;
 	u32_t vbe_control_info;
 	u32_t vbe_mode_info;
+#if 0
 	u32_t vbe_mode;
 	u32_t vbe_interface_seg;
 	u32_t vbe_interface_off;
 	u32_t vbe_interface_len;
+#else
+//these are only 16bit not 32bit.
+	u16_t vbe_mode;
+	u16_t vbe_interface_seg;
+	u16_t vbe_interface_off;
+	u16_t vbe_interface_len;
+#endif
 } __attribute__((packed));
 
 struct multiboot_mod_list

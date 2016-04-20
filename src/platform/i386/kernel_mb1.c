@@ -1,13 +1,13 @@
 /* only one VGA driver at a time.. */
-#define ENABLE_VGA
-#undef ENABLE_SCREEN
+#undef ENABLE_VGA
+#define ENABLE_SCREEN
 
 #define ENABLE_SERIAL
 #define ENABLE_TIMER
 
 #include "assert.h"
 #include "kernel.h"
-//#include "multiboot.h"
+#include "multiboot.h"
 #include "string.h"
 #include "boot_comp.h"
 #include "mem_layout.h"
@@ -57,78 +57,29 @@ hextol(const char *s)
 extern u8_t end; 		/* from the linker script */
 
 void
-kern_memory_setup(struct multiboot_tag *mb, u32_t mboot2_magic)
+kern_memory_setup(struct multiboot *mb, u32_t mboot_magic)
 {
-//	struct multiboot_mod_list *mods;
-//	struct multiboot_mem_list *mems;
-	unsigned mbi_size = 0;
-	struct multiboot_tag *tag;
+	struct multiboot_mod_list *mods;
+	struct multiboot_mem_list *mems;
 	unsigned int i, wastage = 0;
 	glb_memlayout.allocs_avail = 1;
 
 
-	if (mboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
-		printcv(4, 15, "Not started from a multiboot loader! Act:%x - Req:%x\n", mboot2_magic, MULTIBOOT2_BOOTLOADER_MAGIC);
+	if (mboot_magic != MULTIBOOT_EAX_MAGIC) {
+		printcv(4, 15, "Not started from a multiboot loader! Act:%x - Req:%x\n", mboot_magic, MULTIBOOT_EAX_MAGIC);
 		FOREVER ;
-		die("Not started from a multiboot loader! Act:%x - Req:%x\n", mboot2_magic, MULTIBOOT2_BOOTLOADER_MAGIC);
+		die("Not started from a multiboot loader! Act:%x - Req:%x\n", mboot_magic, MULTIBOOT_EAX_MAGIC);
 	}
-
-	mbi_size = *(unsigned *)mb;
-	printv("Announced mbi size 0x%x\n", mbi_size);
-	int total_tags = 0, required_tags = 0;
-	for(tag = (struct multiboot_tag *) (mb + 8);
-		tag -> type != MULTIBOOT_TAG_TYPE_END;
-		tag = (struct multiboot_tag *) ((multiboot_uint8_t *) tag
-						+ ((tag -> size + 7) & ~7))) {
-		total_tags ++;
-		switch(tag -> type) {
-			case MULTIBOOT_TAG_TYPE_MODULE: 
-				printv ("Module at 0x%x-0x%x. Command line %s\n",
-					((struct multiboot_tag_module *) tag)->mod_start,
-					((struct multiboot_tag_module *) tag)->mod_end,
-					((struct multiboot_tag_module *) tag)->cmdline);
-				required_tags ++;
-				break;
-			case MULTIBOOT_TAG_TYPE_MMAP:
-				{
-					multiboot_memory_map_t *mmap;
-
-					printv ("mmap\n");
-
-					for (mmap = ((struct multiboot_tag_mmap *) tag)->entries;
-							(multiboot_uint8_t *) mmap 
-							< (multiboot_uint8_t *) tag + tag->size;
-							mmap = (multiboot_memory_map_t *) 
-							((unsigned long) mmap
-							 + ((struct multiboot_tag_mmap *) tag)->entry_size))
-						printv (" base_addr = 0x%x%x,"
-								" length = 0x%x%x, type = 0x%x\n",
-								(unsigned) (mmap->addr >> 32),
-								(unsigned) (mmap->addr & 0xffffffff),
-								(unsigned) (mmap->len >> 32),
-								(unsigned) (mmap->len & 0xffffffff),
-								(unsigned) mmap->type);
-				}
-
-				required_tags ++;
-				break;
-		}
-	}
-
-	tag = (struct multiboot_tag *) ((multiboot_uint8_t *) tag 
-				  + ((tag->size + 7) & ~7));
-	printv ("Total mbi size 0x%x, tags - total : %d, required: %d\n", (unsigned) tag - (unsigned) mb, total_tags, required_tags);
-	if(required_tags != 2) {
-		printcv(1, 15, "Multiboot flags are missing one of %x : %x\n", 
-		    MULTIBOOT_TAG_TYPE_MMAP, MULTIBOOT_TAG_TYPE_MODULE);
+	if ((mb->flags & MULTIBOOT_FLAGS_REQUIRED) != MULTIBOOT_FLAGS_REQUIRED) {
+		printcv(1, 15, "Multiboot flags include %x but are missing one of %x\n", 
+		    mb->flags, MULTIBOOT_FLAGS_REQUIRED);
 		FOREVER ;
-		die("Multiboot flags are missing one of %x : %x\n", 
-		    MULTIBOOT_TAG_TYPE_MMAP, MULTIBOOT_TAG_TYPE_MODULE);
 
+		die("Multiboot flags include %x but are missing one of %x\n", 
+		    mb->flags, MULTIBOOT_FLAGS_REQUIRED);
 	}
-	FOREVER ;
 
-#if 0
+
 	mods = (struct multiboot_mod_list *)mb->mods_addr;
 	mems = (struct multiboot_mem_list *)mb->mmap_addr;
 	if (mb->mods_count != 1) {
@@ -191,11 +142,10 @@ kern_memory_setup(struct multiboot_tag *mb, u32_t mboot2_magic)
 	       wastage>>20, wastage & ((1<<20)-1));
 
 	assert(STK_INFO_SZ == sizeof(struct cos_cpu_local_info));
-#endif
 }
 
 void 
-kmain(struct multiboot_tag *mboot2_tag, u32_t mboot2_magic, u32_t esp)
+kmain(struct multiboot *mboot, u32_t mboot_magic, u32_t esp)
 {
 #define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
 	unsigned long max;
@@ -216,11 +166,11 @@ kmain(struct multiboot_tag *mboot2_tag, u32_t mboot2_magic, u32_t esp)
 	init_video();
 #endif
 #endif
-	printcv(8, 15, "In Composite kernel.. (kmain) - header:%x, magic: %x, esp: %x\n", mboot2_tag, mboot2_magic, esp);
-/*	max = MAX((unsigned long)mboot->mods_addr, 
+	printcv(8, 15, "In Composite kernel.. (kmain) - header:%x, magic: %x, esp: %x\n", mboot, mboot_magic, esp);
+	max = MAX((unsigned long)mboot->mods_addr, 
 		  MAX((unsigned long)mboot->mmap_addr, (unsigned long)(chal_va2pa(&end))));
-	kern_paging_map_init((void*)(max + PGD_SIZE)); */
-	kern_memory_setup(mboot2_tag, mboot2_magic);
+	kern_paging_map_init((void*)(max + PGD_SIZE));
+	kern_memory_setup(mboot, mboot_magic);
 	printcv(9, 15, "About to go deep..\n");
 
 	chal_init();
