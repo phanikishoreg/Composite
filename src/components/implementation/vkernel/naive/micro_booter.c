@@ -101,6 +101,7 @@ test_thds_perf(void)
 		cos_thd_switch(ts);
 	}
 	rdtscll(end_swt_cycles);
+	// Divide by 2LL because switching has send/receive end???
 	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
 
 	printc("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
@@ -485,7 +486,7 @@ bench_vcos_thd_alloc(void)
 		thds[i] = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn_perf, NULL);
 	}
 	rdtscll(end_thd_cycles);
-	total_thd_cycles = (end_thd_cycles - start_thd_cycles) / 2LL;
+	total_thd_cycles = (end_thd_cycles - start_thd_cycles);
 
 	printc("Average THD ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_thd_cycles, (long long) MAX, (total_thd_cycles / (long long)MAX));
@@ -507,7 +508,7 @@ bench_cos_thd_alloc(void)
 		thds[i] = cos_thd_alloc(&vkern_info, vkern_info.comp_cap, thd_fn_perf, NULL);
 	}
 	rdtscll(end_thd_cycles);
-	total_thd_cycles = (end_thd_cycles - start_thd_cycles) / 2LL;
+	total_thd_cycles = (end_thd_cycles - start_thd_cycles);
 
 	printc("Average THD ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_thd_cycles, (long long) MAX, (total_thd_cycles / (long long)MAX));
@@ -518,7 +519,7 @@ bench_vcos_arcv_alloc(void)
 {
 	printc("Testing vcos_arcv_alloc\n");
 	int i;
-	int MAX = 4;
+	int MAX = 1;
 	arcvcap_t caps[MAX];
 	long long total_arcv_cycles = 0;
 	long long start_arcv_cycles = 0, end_arcv_cycles = 0;
@@ -535,11 +536,12 @@ bench_vcos_arcv_alloc(void)
 	rdtscll(start_arcv_cycles);
 	for (i = 0; i < MAX; i++)
 	{
+		printc("Test %d\n", i);
 		caps[i] = vcos_arcv_alloc(&vmbooter_info, tcp, tccp, vmbooter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
 		assert(caps[i]);
 	}
 	rdtscll(end_arcv_cycles);
-	total_arcv_cycles = (end_arcv_cycles - start_arcv_cycles) / 2LL;
+	total_arcv_cycles = (end_arcv_cycles - start_arcv_cycles);
 
 	printc("Average ARCV ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_arcv_cycles, (long long) MAX, (total_arcv_cycles / (long long)MAX));
@@ -550,7 +552,7 @@ bench_cos_arcv_alloc(void)
 {
 	printc("Testing cos_arcv_alloc\n");
 	int i;
-	int MAX = 4;
+	int MAX = 1;
 	arcvcap_t caps[MAX];
 	long long total_arcv_cycles = 0;
 	long long start_arcv_cycles = 0, end_arcv_cycles = 0;
@@ -571,7 +573,7 @@ bench_cos_arcv_alloc(void)
 		assert(caps[i]);
 	}
 	rdtscll(end_arcv_cycles);
-	total_arcv_cycles = (end_arcv_cycles - start_arcv_cycles) / 2LL;
+	total_arcv_cycles = (end_arcv_cycles - start_arcv_cycles);
 
 	printc("Average ARCV ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_arcv_cycles, (long long) MAX, (total_arcv_cycles / (long long)MAX));
@@ -601,7 +603,7 @@ bench_vcos_tcap_split(void)
 		assert(tccp);
 	}
 	rdtscll(end_split_cycles);
-	total_split_cycles = (end_split_cycles - start_split_cycles) / 2LL;
+	total_split_cycles = (end_split_cycles - start_split_cycles);
 
 	printc("Average SPLIT ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_split_cycles, (long long) MAX, (total_split_cycles / (long long)MAX));
@@ -631,7 +633,7 @@ bench_cos_tcap_split(void)
 		assert(tccp);
 	}
 	rdtscll(end_split_cycles);
-	total_split_cycles = (end_split_cycles - start_split_cycles) / 2LL;
+	total_split_cycles = (end_split_cycles - start_split_cycles);
 
 	printc("Average SPLIT ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_split_cycles, (long long) MAX, (total_split_cycles / (long long)MAX));
@@ -670,7 +672,7 @@ bench_vcos_asnd_alloc(void)
 		assert(scp_global);
 	}
 	rdtscll(end_asnd_cycles);
-	total_asnd_cycles = (end_asnd_cycles - start_asnd_cycles) / 2LL;
+	total_asnd_cycles = (end_asnd_cycles - start_asnd_cycles);
 
 	printc("Average ASND ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_asnd_cycles, (long long) MAX, (total_asnd_cycles / (long long)MAX));
@@ -709,10 +711,60 @@ bench_cos_asnd_alloc(void)
 		assert(scp_global);
 	}
 	rdtscll(end_asnd_cycles);
-	total_asnd_cycles = (end_asnd_cycles - start_asnd_cycles) / 2LL;
+	total_asnd_cycles = (end_asnd_cycles - start_asnd_cycles);
 
 	printc("Average ASND ALLOC (Total: %lld / Iterations: %lld ): %lld\n",
 		total_asnd_cycles, (long long) MAX, (total_asnd_cycles / (long long)MAX));
+}
+
+void
+bench_vthds_perf(void)
+{
+	thdcap_t ts;
+	long long total_swt_cycles = 0;
+	long long start_swt_cycles = 0, end_swt_cycles = 0;
+	int i;
+	int MAX = 100;
+
+	ts = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn_perf, NULL);
+	assert(ts);
+	cos_thd_switch(ts);
+
+	rdtscll(start_swt_cycles);
+	for (i = 0 ; i < MAX; i++) {
+		cos_thd_switch(ts);
+	}
+	rdtscll(end_swt_cycles);
+	// Divide by 2LL because switching has send/receive end???
+	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
+
+	printc("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
+		total_swt_cycles, (long long) ITER, (total_swt_cycles / (long long)MAX));
+}
+
+void
+bench_thds_perf(void)
+{
+	thdcap_t ts;
+	long long total_swt_cycles = 0;
+	long long start_swt_cycles = 0, end_swt_cycles = 0;
+	int i;
+	int MAX = 100;
+
+	ts = cos_thd_alloc(&vkern_info, vkern_info.comp_cap, thd_fn_perf, NULL);
+	assert(ts);
+	cos_thd_switch(ts);
+
+	rdtscll(start_swt_cycles);
+	for (i = 0 ; i < MAX; i++) {
+		cos_thd_switch(ts);
+	}
+	rdtscll(end_swt_cycles);
+	// Divide by 2LL because switching has send/receive end???
+	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
+
+	printc("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
+		total_swt_cycles, (long long) ITER, (total_swt_cycles / (long long)MAX));
 }
 
 void
@@ -754,7 +806,7 @@ test_run(void *d)
 //	printc("---------------------------\n");
 
 	/////////////////////////
-	bench_vcos_thd_alloc();
+//	bench_vcos_thd_alloc();
 //	bench_cos_thd_alloc();
 	/////////////////////////
 //	bench_vcos_arcv_alloc();
@@ -765,7 +817,9 @@ test_run(void *d)
 	/////////////////////////
 //	bench_vcos_asnd_alloc();
 //	bench_cos_asnd_alloc();
-
+	/////////////////////////
+//	bench_vthds_perf();
+	bench_thds_perf();
 
 
 	printc("\nMicro Booter done.\n");
