@@ -409,9 +409,9 @@ test_inv(void)
 	sinvcap_t ic;
 	unsigned int r;
 
-	cc = cos_comp_alloc(&vmbooter_info, vmbooter_info.captbl_cap, vmbooter_info.pgtbl_cap, (vaddr_t)NULL);
+	cc = vcos_comp_alloc(&vmbooter_info, vmbooter_info.captbl_cap, vmbooter_info.pgtbl_cap, (vaddr_t)NULL);
 	assert(cc > 0);
-	ic = cos_sinv_alloc(&vmbooter_info, cc, (vaddr_t)__inv_test_serverfn);
+	ic = vcos_sinv_alloc(&vmbooter_info, cc, (vaddr_t)__inv_test_serverfn);
 	assert(ic > 0);
 
 	r = call_cap_mb(ic, 1, 2, 3);
@@ -484,6 +484,7 @@ bench_vcos_thd_alloc(void)
 	for (i = 0; i < MAX; i++)
 	{
 		thds[i] = vcos_thd_alloc(&vmbooter_info, vmbooter_info.comp_cap, thd_fn_perf, NULL);
+		assert(thds[i]);
 	}
 	rdtscll(end_thd_cycles);
 	total_thd_cycles = (end_thd_cycles - start_thd_cycles);
@@ -506,6 +507,7 @@ bench_cos_thd_alloc(void)
 	for (i = 0; i < MAX; i++)
 	{
 		thds[i] = cos_thd_alloc(&vkern_info, vkern_info.comp_cap, thd_fn_perf, NULL);
+		assert(thds[i]);
 	}
 	rdtscll(end_thd_cycles);
 	total_thd_cycles = (end_thd_cycles - start_thd_cycles);
@@ -600,7 +602,7 @@ bench_vcos_tcap_split(void)
 	for (i = 0; i < MAX; i++)
 	{
 		tccp[i] = vcos_tcap_split(&vmbooter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 0, 0);
-		assert(tccp);
+		assert(tccp[i]);
 	}
 	rdtscll(end_split_cycles);
 	total_split_cycles = (end_split_cycles - start_split_cycles);
@@ -630,7 +632,7 @@ bench_cos_tcap_split(void)
 	for (i = 0; i < MAX; i++)
 	{
 		tccp[i] = cos_tcap_split(&vkern_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 1<<30, 0, 0);
-		assert(tccp);
+		assert(tccp[i]);
 	}
 	rdtscll(end_split_cycles);
 	total_split_cycles = (end_split_cycles - start_split_cycles);
@@ -776,7 +778,7 @@ test_run(void *d)
 //	printc("\t%d cycles per microsecond\n", cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE));
 
 //	printc("---------------------------\n");
-//	test_thds();
+	test_thds();
 //	printc("---------------------------\n");
 //	test_thds_perf();
 //	printc("---------------------------\n");
@@ -790,13 +792,13 @@ test_run(void *d)
 //	printc("---------------------------\n");
 //
 //	printc("---------------------------\n");
-//	test_async_endpoints();
+	test_async_endpoints();
 //	printc("---------------------------\n");
 //	test_async_endpoints_perf();
 //	printc("---------------------------\n");
 //
 //	printc("---------------------------\n");
-//	test_inv();
+	//test_inv();
 //	printc("---------------------------\n");
 //	test_inv_perf();
 //	printc("---------------------------\n");
@@ -819,7 +821,7 @@ test_run(void *d)
 //	bench_cos_asnd_alloc();
 	/////////////////////////
 //	bench_vthds_perf();
-	bench_thds_perf();
+//	bench_thds_perf();
 
 
 	printc("\nMicro Booter done.\n");
