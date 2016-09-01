@@ -268,69 +268,156 @@ test_async_endpoints_perf(void)
 	while (async_test_flag) cos_thd_switch(tcp);
 }
 
-#define TCAP_NLAYERS 3
-static volatile int child_activated[TCAP_NLAYERS][2];
-/* tcap child/parent receive capabilities, and the send capability */
-static volatile arcvcap_t tc_crc[TCAP_NLAYERS][2], tc_prc[TCAP_NLAYERS][2];
-static volatile asndcap_t tc_sc[TCAP_NLAYERS][3];
+#define TEST_MAX_DELEGS (TCAP_MAX_DELEGATIONS - 1)
+tcap_t tcs[TEST_MAX_DELEGS];
+thdcap_t thds[TEST_MAX_DELEGS];
+arcvcap_t rcvs[TEST_MAX_DELEGS];
+asndcap_t asnds[TEST_MAX_DELEGS][TEST_MAX_DELEGS];
+long long total_tcap_cycles = 0, start_tcap_cycles = 0, end_tcap_cycles = 0;
 
 static void
-tcap_child(void *d)
+tcap_test_fn(void *d)
 {
-	arcvcap_t __tc_crc = (arcvcap_t)d;
-
+	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
 	while (1) {
-		int pending;
-
-		pending = cos_rcv(__tc_crc);
-		PRINTC("tcap_test:rcv: pending %d\n", pending);
+		rdtscll(end_tcap_cycles);
+		cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
 	}
 }
 
 static void
-tcap_parent(void *d)
+tcap_perf_test_prepare(int min)
+{
+	int i, j, k, ret;
+
+	/* Preperation for tcaps ubenchmarks */
+	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+		tcs[i] = cos_tcap_alloc(&booter_info, TCAP_PRIO_MAX);
+		assert(tcs[i]);
+		
+		thds[i] = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_test_fn, (void *)i);
+		assert(thds[i]);
+		cos_thd_switch(thds[i]);
+
+		rcvs[i] = cos_arcv_alloc(&booter_info, thds[i], tcs[i], booter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+		assert(rcvs[i]);
+
+		ret = cos_tcap_transfer(rcvs[i], BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX);
+		assert(ret == 0);
+	}
+
+	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+		for (j = i + 1 ; j < TEST_MAX_DELEGS ; j ++) {
+
+			asnds[i][j] = cos_asnd_alloc(&booter_info, rcvs[j], booter_info.captbl_cap);
+			assert(asnds[i][j]);
+
+			asnds[j][i] = cos_asnd_alloc(&booter_info, rcvs[i], booter_info.captbl_cap);
+			assert(asnds[j][i]);
+		}
+	}
+
+	if (!min) { /* MAXIMUM delegations */
+		for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+			for (j = 0 ; j < TEST_MAX_DELEGS ; j ++) {
+				if ((cos_tcap_transfer(rcvs[i], tcs[j], TCAP_RES_INF, TCAP_PRIO_MAX))) assert(0);
+			}
+		}
+	}
+
+}
+
+static void
+tcap_perf_test_transfer(void)
 {
 	int i;
-	asndcap_t __tc_sc = (asndcap_t)d;
 
-	for (i = 0 ; i < ITER ; i++) {
-		cos_asnd(__tc_sc);
+	if (cos_tcap_transfer(rcvs[0], tcs[1], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
+	if (cos_tcap_transfer(rcvs[1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
+
+	total_tcap_cycles = 0;
+	for (i = 0 ; i < ITER ; i ++) {
+		start_tcap_cycles = 0;
+		end_tcap_cycles = 0;
+		rdtscll(start_tcap_cycles);
+		if (cos_tcap_transfer(rcvs[0], tcs[1], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
+		rdtscll(end_tcap_cycles);
+		total_tcap_cycles += (end_tcap_cycles - start_tcap_cycles);
 	}
+	PRINTC("Average Tcap-transfer (Total: %lld / Iterations: %lld ): %lld\n",
+		total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
+
+#if 0
+	/* tcaps_transfer ubenchmarks */
+	//for (k = 0 ; k < ITER ; k ++) {
+		for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+			for (j = 0 ; j < TEST_MAX_DELEGS ; j ++) {
+				rdtscll(start_cycles);
+				if (cos_tcap_transfer(rcvs[i], tcs[j], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
+				rdtscll(end_cycles);
+				total_cycles += (end_cycles - start_cycles);
+			}
+		}
+	//}
+	PRINTC("Average Tcap-transfer (Total: %lld / No of Transfers: %lld ): %lld\n",
+		total_cycles, (long long)(TEST_MAX_DELEGS * TEST_MAX_DELEGS), /* * (long long)ITER), */
+		(total_cycles / (long long)(TEST_MAX_DELEGS * TEST_MAX_DELEGS))); /* * (long long)ITER))); */
+#endif
+
 }
 
-/* static void */
-/* test_tcaps(void) */
-/* { */
-/* 	thdcap_t tcp, tcc; */
-/* 	tcap_t tccp, tccc; */
-/* 	arcvcap_t rcp, rcc; */
+static void
+tcap_perf_test_delegate(int yield)
+{
+	int i;
 
-/* 	/\* parent rcv capabilities *\/ */
-/* 	tcp = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_parent, (void*)BOOT_CAPTBL_SELF_INITTHD_BASE); */
-/* 	assert(tcp); */
-/* 	tccp = cos_tcap_split(&booter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, 0); */
-/* 	assert(tccp); */
-/* 	rcp = cos_arcv_alloc(&booter_info, tcp, tccp, booter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE); */
-/* 	assert(rcp); */
+	/*
+	 * Prep for tcap-deleg ubench
+	 * Required because the current tcap being the ROOT tcap, has ndelegs = 1.
+	 */
+	if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
 
-/* 	/\* child rcv capabilities *\/ */
-/* 	tcc = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_child, (void*)tcp); */
-/* 	assert(tcc); */
-/* 	tccc = cos_tcap_split(&booter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, 0); */
-/* 	assert(tccc); */
-/* 	rcc = cos_arcv_alloc(&booter_info, tcc, tccc, booter_info.comp_cap, rcp); */
-/* 	assert(rcc); */
+	total_tcap_cycles = 0;
+	for (i = 0 ; i < ITER ; i ++) {
+		start_tcap_cycles = 0;
+		end_tcap_cycles = 0;
+		rdtscll(start_tcap_cycles);
+		if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, yield)) assert(0);
+		total_tcap_cycles += (end_tcap_cycles - start_tcap_cycles);
+	}
 
-/* 	/\* make the snd channel to the child *\/ */
-/* 	scp_global = cos_asnd_alloc(&booter_info, rcc, booter_info.captbl_cap); */
-/* 	assert(scp_global); */
+	PRINTC("Average Tcap-delegate%s (Total: %lld / Iterations: %lld ): %lld\n", yield ? " w/ yield" : "",
+		total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
 
-/* 	rcc_global = rcc; */
-/* 	rcp_global = rcp; */
+#if 0
+	/* tcaps_delegate ubenchmarks */
+	//for (k = 0 ; k < ITER ; k ++) {
+		for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+			for (j = 0 ; j < TEST_MAX_DELEGS ; j ++) {
+		//		PRINTC("%s:%d - k:%d i:%d j:%d\n", __FILE__, __LINE__, k, i, j);
+				if (i == j) continue;
+				end_cycles = 0LL;
+				rdtscll(start_cycles);
+				if (cos_tcap_delegate(asnds[i][j], tcs[i], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
+				total_cycles += (end_cycles - start_cycles);
+			}
+		}
+	//}
 
-/* 	async_test_flag = 1; */
-/* 	while (async_test_flag) cos_thd_switch(tcp); */
-/* } */
+	PRINTC("Average Tcap-delegate (Total: %lld / No of Delegations: %lld ): %lld\n",
+		total_cycles, (long long)((TEST_MAX_DELEGS-1) * (TEST_MAX_DELEGS-1)), /* * (long long)ITER), */
+		(total_cycles / (long long)((TEST_MAX_DELEGS-1) * (TEST_MAX_DELEGS-1)))); /* * (long long)ITER))); */
+#endif
+}
+
+static void
+test_tcaps_perf(void)
+{
+	tcap_perf_test_prepare (0);
+	tcap_perf_test_transfer();
+	tcap_perf_test_delegate(1);
+	tcap_perf_test_delegate(0);
+}
 
 static void
 spinner(void *d)
@@ -482,17 +569,19 @@ test_run(void)
 	 * It is ideal to ubenchmark kernel API with timer interrupt detached,
 	 * Not so much for unit-tests
 	 */
-	test_thds();
+	test_tcaps_perf();
+
+//	test_thds();
 	test_thds_perf();
 
-	test_mem();
+//	test_mem();
 
-	test_async_endpoints();
+//	test_async_endpoints();
 	test_async_endpoints_perf();
 
-	test_inv();
+//	test_inv();
 	test_inv_perf();
 
-	test_captbl_expand();
+//	test_captbl_expand();
 }
 

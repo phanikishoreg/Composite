@@ -127,7 +127,7 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 
 	assert(dst && src);
 	assert(tcap_isactive(dst));
-	if (unlikely(dst->ndelegs >= TCAP_MAX_DELEGATIONS)) return -ENOMEM;
+	if (unlikely(dst->ndelegs > TCAP_MAX_DELEGATIONS)) return -ENOMEM;
 
 	d = tcap_sched_info(dst)->tcap_uid;
 	s = tcap_sched_info(src)->tcap_uid;
@@ -141,9 +141,13 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 		struct tcap_sched_info *n, t;
 
 		/* Let the branch prediction nightmare begin... */
-		if (j == src->ndelegs        || dst->delegations[i].tcap_uid < src->delegations[j].tcap_uid) {
+		if (j == src->ndelegs) {
 			n = &dst->delegations[i++];
-		} else if (i == dst->ndelegs || dst->delegations[i].tcap_uid > src->delegations[j].tcap_uid) {
+		} else if (i == dst->ndelegs) { 
+			n = &src->delegations[j++];
+		} else if (dst->delegations[i].tcap_uid < src->delegations[j].tcap_uid) {
+			n = &dst->delegations[i++];
+		} else if (dst->delegations[i].tcap_uid > src->delegations[j].tcap_uid) {
 			n = &src->delegations[j++];
 		} else {	/* same scheduler */
 			assert(dst->delegations[i].tcap_uid == src->delegations[j].tcap_uid);

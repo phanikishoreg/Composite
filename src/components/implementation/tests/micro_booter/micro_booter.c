@@ -38,7 +38,7 @@ int num = 1, den = 0;
 
 void
 term_fn(void *d)
-{ BUG_DIVZERO(); }
+{ while (1) ;/*BUG_DIVZERO();*/ }
 
 void
 timer_attach(void)
