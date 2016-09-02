@@ -286,9 +286,9 @@ tcap_test_fn(void *d)
 }
 
 static void
-tcap_perf_test_prepare(int min)
+tcap_perf_test_prepare(void)
 {
-	int i, j, k, ret;
+	int i, j, ret;
 
 	/* Preperation for tcaps ubenchmarks */
 	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
@@ -316,24 +316,32 @@ tcap_perf_test_prepare(int min)
 			assert(asnds[j][i]);
 		}
 	}
+}
 
-	if (!min) { /* MAXIMUM delegations */
-		for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
-			for (j = 0 ; j < TEST_MAX_DELEGS ; j ++) {
-				if ((cos_tcap_transfer(rcvs[i], tcs[j], TCAP_RES_INF, TCAP_PRIO_MAX))) assert(0);
-			}
+static void
+tcap_perf_test_ndeleg(int ndelegs)
+{
+	int i, j;
+
+	/* TODO: cleanup with for-loop */
+	for (i = 1 ; i <= (ndelegs - 1) ; i ++) {
+		for (j = 1 ; j <= (ndelegs - 1) ; j ++) {
+			if (i == j) continue;
+			if ((cos_tcap_transfer(rcvs[i-1], tcs[j-1], TCAP_RES_INF, TCAP_PRIO_MAX))) assert(0);
 		}
 	}
 
+	/*
+	 * Prep for tcap-deleg ubench
+	 * Required because the current tcap being the ROOT tcap, has ndelegs = 1.
+	 */
+	if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
 }
 
 static void
 tcap_perf_test_transfer(void)
 {
 	int i;
-
-	if (cos_tcap_transfer(rcvs[0], tcs[1], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
-	if (cos_tcap_transfer(rcvs[1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
 
 	total_tcap_cycles = 0;
 	for (i = 0 ; i < ITER ; i ++) {
@@ -346,36 +354,12 @@ tcap_perf_test_transfer(void)
 	}
 	PRINTC("Average Tcap-transfer (Total: %lld / Iterations: %lld ): %lld\n",
 		total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
-
-#if 0
-	/* tcaps_transfer ubenchmarks */
-	//for (k = 0 ; k < ITER ; k ++) {
-		for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
-			for (j = 0 ; j < TEST_MAX_DELEGS ; j ++) {
-				rdtscll(start_cycles);
-				if (cos_tcap_transfer(rcvs[i], tcs[j], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
-				rdtscll(end_cycles);
-				total_cycles += (end_cycles - start_cycles);
-			}
-		}
-	//}
-	PRINTC("Average Tcap-transfer (Total: %lld / No of Transfers: %lld ): %lld\n",
-		total_cycles, (long long)(TEST_MAX_DELEGS * TEST_MAX_DELEGS), /* * (long long)ITER), */
-		(total_cycles / (long long)(TEST_MAX_DELEGS * TEST_MAX_DELEGS))); /* * (long long)ITER))); */
-#endif
-
 }
 
 static void
 tcap_perf_test_delegate(int yield)
 {
 	int i;
-
-	/*
-	 * Prep for tcap-deleg ubench
-	 * Required because the current tcap being the ROOT tcap, has ndelegs = 1.
-	 */
-	if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
 
 	total_tcap_cycles = 0;
 	for (i = 0 ; i < ITER ; i ++) {
@@ -388,35 +372,22 @@ tcap_perf_test_delegate(int yield)
 
 	PRINTC("Average Tcap-delegate%s (Total: %lld / Iterations: %lld ): %lld\n", yield ? " w/ yield" : "",
 		total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
-
-#if 0
-	/* tcaps_delegate ubenchmarks */
-	//for (k = 0 ; k < ITER ; k ++) {
-		for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
-			for (j = 0 ; j < TEST_MAX_DELEGS ; j ++) {
-		//		PRINTC("%s:%d - k:%d i:%d j:%d\n", __FILE__, __LINE__, k, i, j);
-				if (i == j) continue;
-				end_cycles = 0LL;
-				rdtscll(start_cycles);
-				if (cos_tcap_delegate(asnds[i][j], tcs[i], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
-				total_cycles += (end_cycles - start_cycles);
-			}
-		}
-	//}
-
-	PRINTC("Average Tcap-delegate (Total: %lld / No of Delegations: %lld ): %lld\n",
-		total_cycles, (long long)((TEST_MAX_DELEGS-1) * (TEST_MAX_DELEGS-1)), /* * (long long)ITER), */
-		(total_cycles / (long long)((TEST_MAX_DELEGS-1) * (TEST_MAX_DELEGS-1)))); /* * (long long)ITER))); */
-#endif
 }
 
 static void
 test_tcaps_perf(void)
 {
-	tcap_perf_test_prepare (0);
-	tcap_perf_test_transfer();
-	tcap_perf_test_delegate(1);
-	tcap_perf_test_delegate(0);
+	int ndelegs[] = {3, 8, 16, 64};
+	int i;
+
+	tcap_perf_test_prepare();
+	for ( i = 0; i < (int)(sizeof(ndelegs)/sizeof(ndelegs[0])); i ++) {
+		PRINTC("Tcaps-ubench for ndelegs = %d\n", ndelegs[i]);
+		tcap_perf_test_ndeleg(ndelegs[i]);
+		tcap_perf_test_transfer();
+		tcap_perf_test_delegate(1);
+		tcap_perf_test_delegate(0);
+	}
 }
 
 static void
@@ -570,6 +541,7 @@ test_run(void)
 	 * Not so much for unit-tests
 	 */
 	test_tcaps_perf();
+	while (1) ;
 
 //	test_thds();
 	test_thds_perf();
