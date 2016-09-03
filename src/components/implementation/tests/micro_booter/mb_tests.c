@@ -1,5 +1,38 @@
 #include "micro_booter.h"
 
+static int
+fork_comp(struct cos_compinfo *ccinfo)
+{
+	compcap_t cc;
+	/* forking */
+	pgtblcap_t ccpt;
+	vaddr_t range, addr;
+
+	ccpt = cos_pgtbl_alloc(&booter_info);
+	assert(ccpt);
+
+	cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, ccpt, (vaddr_t)&cos_upcall_entry);
+	assert(cc);
+
+	cos_meminfo_init(&ccinfo->mi, BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
+	cos_compinfo_init(ccinfo, ccpt, booter_info.captbl_cap, cc,
+			(vaddr_t)BOOT_MEM_VM_BASE, BOOT_CAPTBL_FREE, &booter_info);
+
+	range = (vaddr_t)cos_get_heap_ptr() - BOOT_MEM_VM_BASE;
+	assert(range > 0);
+	for (addr = 0 ; addr < range ; addr += PAGE_SIZE) {
+		vaddr_t src_pg = (vaddr_t)cos_page_bump_alloc(&booter_info), dst_pg;
+		assert(src_pg);
+
+		memcpy((void *)src_pg, (void *)(BOOT_MEM_VM_BASE + addr), PAGE_SIZE);
+
+		dst_pg = cos_mem_alias(ccinfo, &booter_info, src_pg);
+		assert(dst_pg);
+	}
+
+	return 0;
+}
+
 static void
 thd_fn_perf(void *d)
 {
@@ -377,7 +410,7 @@ tcap_perf_test_delegate(int yield)
 static void
 test_tcaps_perf(void)
 {
-	int ndelegs[] = {3, 8, 16, 64};
+	int ndelegs[] = { 3, 4, 8, 16, 64};
 	int i;
 
 	tcap_perf_test_prepare();
@@ -422,12 +455,49 @@ test_timer(void)
 	PRINTC("Success.\n");
 }
 
+long long spinner_cycles = 0;
+static void
+spinner_perf(void *d)
+{ while (1) rdtscll(spinner_cycles); }
+
+static void
+test_timer_perf(void)
+{
+	int i;
+	thdcap_t tc;
+	thdid_t tid;
+	int rcving;
+	cycles_t cycles;
+	long long end_cycles, total_cycles = 0;
+
+	tc = cos_thd_alloc(&booter_info, booter_info.comp_cap, spinner_perf, NULL);
+	assert(tc);
+
+	cos_thd_switch(tc);
+
+	for (i = 0 ; i < ITER ; i++) {
+		cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
+		rdtscll(end_cycles);
+
+		total_cycles += (end_cycles - spinner_cycles);
+		cos_thd_switch(tc);
+	}
+
+	PRINTC("Average Timer-int latency (Total: %lld / Iterations: %lld ): %lld\n",
+		total_cycles, (long long) ITER, (total_cycles / (long long)ITER));
+}
+
 long long midinv_cycles = 0LL;
 
 int
 test_serverfn(int a, int b, int c)
 {
 	rdtscll(midinv_cycles);
+	if (a == 0) {
+		unsigned int ub = b, uc = c;
+		long long start = ((long long) uc) << 32 | (long long) ub;
+		return (unsigned int) (midinv_cycles - start);
+	}
 	return 0xDEADBEEF;
 }
 
@@ -479,7 +549,7 @@ test_inv(void)
 }
 
 static void
-test_inv_perf(void)
+test_inv_perf(int intra)
 {
 	compcap_t cc;
 	sinvcap_t ic;
@@ -488,8 +558,16 @@ test_inv_perf(void)
 	long long total_inv_cycles = 0LL, total_ret_cycles = 0LL;
 	unsigned int ret;
 
-	cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)NULL);
-	assert(cc > 0);
+	if (intra == 1) {
+		cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)NULL);
+		assert(cc > 0);
+	} else {
+		struct cos_compinfo ccinfo;
+
+		ret = fork_comp(&ccinfo);
+		assert (ret == 0);
+		cc = ccinfo.comp_cap;
+	}
 	ic = cos_sinv_alloc(&booter_info, cc, (vaddr_t)__inv_test_serverfn);
 	assert(ic > 0);
 	ret = call_cap_mb(ic, 1, 2, 3);
@@ -498,17 +576,29 @@ test_inv_perf(void)
 	for (i = 0 ; i < ITER ; i++) {
 		long long start_cycles = 0LL, end_cycles = 0LL;
 
-		midinv_cycles = 0LL;
-		rdtscll(start_cycles);
-		call_cap_mb(ic, 1, 2, 3);
-		rdtscll(end_cycles);
-		total_inv_cycles += (midinv_cycles - start_cycles);
-		total_ret_cycles += (end_cycles - midinv_cycles);
+		if (intra) {
+			midinv_cycles = 0LL;
+			rdtscll(start_cycles);
+			call_cap_mb(ic, 1, 2, 3);
+			rdtscll(end_cycles);
+			total_inv_cycles += (midinv_cycles - start_cycles);
+			total_ret_cycles += (end_cycles - midinv_cycles);
+		} else {
+			unsigned int inv_diff_cycles = 0LL, total_diff_cycles = 0LL;
+
+			rdtscll(start_cycles);
+			inv_diff_cycles = call_cap_mb(ic, 0, (unsigned int)((start_cycles << 32) >> 32), (unsigned int)(start_cycles >> 32));
+			rdtscll(end_cycles);
+			
+			total_diff_cycles = (unsigned int) (end_cycles - start_cycles);
+			total_inv_cycles += (long long) inv_diff_cycles;
+			total_ret_cycles += (long long) (total_diff_cycles - inv_diff_cycles);
+		}
 	}
 
-	PRINTC("Average SINV (Total: %lld / Iterations: %lld ): %lld\n",
+	PRINTC("Average %s SINV (Total: %lld / Iterations: %lld ): %lld\n", intra ? "intra-pgtbl" : "inter-pgtbl",
 		total_inv_cycles, (long long) (ITER), (total_inv_cycles / (long long)(ITER)));
-	PRINTC("Average SRET (Total: %lld / Iterations: %lld ): %lld\n",
+	PRINTC("Average %s SRET (Total: %lld / Iterations: %lld ): %lld\n", intra ? "intra-pgtbl" : "inter-pgtbl",
 		total_ret_cycles, (long long) (ITER), (total_ret_cycles / (long long)(ITER)));
 }
 
@@ -534,6 +624,7 @@ test_run(void)
 {
 	timer_attach();
 	test_timer();
+	test_timer_perf();
 	timer_detach();
 
 	/* 
@@ -541,7 +632,6 @@ test_run(void)
 	 * Not so much for unit-tests
 	 */
 	test_tcaps_perf();
-	while (1) ;
 
 //	test_thds();
 	test_thds_perf();
@@ -552,7 +642,8 @@ test_run(void)
 	test_async_endpoints_perf();
 
 //	test_inv();
-	test_inv_perf();
+//	test_inv_perf(0);
+//	test_inv_perf(1);
 
 //	test_captbl_expand();
 }

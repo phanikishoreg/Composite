@@ -57,9 +57,9 @@ vm_init(void *d)
 	cos_compinfo_init(&booter_info, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_COMP,
 			  (vaddr_t)cos_get_heap_ptr(), VM_CAPTBL_FREE, &booter_info);
 
-	PRINTC("Micro Booter started.\n");
-	test_run();
-	PRINTC("Micro Booter done.\n");
+//	PRINTC("Micro Booter started.\n");
+//	test_run();
+//	PRINTC("Micro Booter done.\n");
 
 	EXIT();
 	return;

@@ -21,9 +21,10 @@
 #include "vk_types.h"
 
 #define PRINTC(fmt, args...) printc("%d: " fmt, vmid , ##args)
-#define ITER       10000
+#define ITER       1000000
 #define TEST_NTHDS 5
 
+extern vaddr_t cos_upcall_entry;
 extern struct cos_compinfo booter_info;
 extern thdcap_t termthd; 		/* switch to this to shutdown */
 extern unsigned long tls_test[TEST_NTHDS];
