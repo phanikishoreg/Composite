@@ -78,6 +78,7 @@ __tcap_budget_xfer(struct tcap *d, struct tcap *s, tcap_res_t cycles)
 done:
 	if (!tcap_is_active(d)) tcap_active_add_after(s, d);
 	if (tcap_expended(s))   tcap_active_rem(s);
+	//printk("%s:%d - %lu\n", __func__, __LINE__, bd->cycles);
 
 	return 0;
 }

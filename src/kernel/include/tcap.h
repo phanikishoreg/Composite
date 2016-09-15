@@ -107,6 +107,10 @@ static inline void
 tcap_active_add_after(struct tcap *existing, struct tcap *t)
 { list_add_after(&existing->active_list, &t->active_list); }
 
+static inline void
+tcap_active_add_before(struct tcap *existing, struct tcap *t)
+{ list_add_before(&existing->active_list, &t->active_list); }
+
 static inline struct tcap *
 tcap_active_next(struct cos_cpu_local_info *cli) { return (struct tcap *)list_first(&cli->tcaps); }
 
@@ -120,9 +124,11 @@ tcap_active_rem(struct tcap *t) { list_rem(&t->active_list); }
 static inline tcap_res_t
 tcap_consume(struct tcap *t, tcap_res_t cycles)
 {
+	//printk("%s:%d - %lu %lu\n", __func__, __LINE__, cycles, t->budget.cycles);
 	assert(t);
 	if (TCAP_RES_IS_INF(t->budget.cycles)) return 0;
 	if (cycles >= t->budget.cycles) {
+		//printk("%s:%d\n", __func__, __LINE__);
 		t->budget.cycles = 0;
 		tcap_active_rem(t); /* no longer active */
 
@@ -165,7 +171,9 @@ tcap_budgets_update(struct cos_cpu_local_info *cos_info, struct thread *t, struc
 	struct tcap *curr = tcap_current(cos_info);
 
 	cycles =  *now   = tsc();
+	//printk("%s:%d - now: %llu\n", __FILE__, __LINE__, *now);
 	expended         = cycles - cos_info->cycles;
+	//printk("%s:%d - %llu %lu\n", __func__, __LINE__, cycles, expended);
 	cos_info->cycles = cycles;
 	__thd_exec_add(t, expended);
 	tcap_consume(curr, expended);
@@ -182,20 +190,35 @@ static inline void
 tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_time_t timeout, cycles_t now)
 {
 	cycles_t timer, timeout_cyc;
+	tcap_res_t left;
 
 	/* timeout based on the tcap budget... */
-	timer       = now + tcap_left(next);
+	left        = tcap_left(next);
+	if (timeout == TCAP_TIME_NIL && TCAP_RES_IS_INF(left)) {
+		//printk("%s:%d\n", __FILE__, __LINE__);
+		return;
+	}
+
+	timer       = now + left;
 	/* overflow?  especially relevant if left = TCAP_RES_INF */
-	if (unlikely(timer < now)) timer = ~0ULL;
+	if (unlikely(timer <= now)) {
+		//printk("%s:%d\n", __FILE__, __LINE__);
+		timer = ~0ULL;
+		return;
+	}
 	timeout_cyc = tcap_time2cyc(timeout, now);
+	//printk("START %s:%d - tcap_left(next):%lu timer:%llu timeout:%lu timeout_cyc:%llu now:%llu\n", __FILE__, __LINE__, left, timer, timeout, timeout_cyc, now);
 	/* ...or explicit timeout within the bounds of the budget */
 	if (timeout != TCAP_TIME_NIL && timeout_cyc < timer) {
+		//printk("%s:%d\n", __FILE__, __LINE__); 
 		if (tcap_time_lessthan(timeout, tcap_cyc2time(now))) timer = now;
 		else                                                 timer = timeout_cyc;
 	}
 	/* avoid the large costs of setting the timer hardware if possible */
+	//printk("%s:%d = timer:%llu cos_info->timeout_next:%lu\n", __FILE__, __LINE__, timer, cos_info->timeout_next); 
 	if (cycles_same(cos_info->timeout_next, timer)) return;
 
+	//printk("%s:%d = %lld\n", __FILE__, __LINE__, timer-now);
 	chal_timer_set(timer - now);
 	cos_info->timeout_next = timer;
 }

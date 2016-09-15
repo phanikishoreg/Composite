@@ -38,18 +38,47 @@ int num = 1, den = 0;
 
 void
 term_fn(void *d)
-{ BUG_DIVZERO(); }
+{ while(1); }
+//{ BUG_DIVZERO(); }
 
 void
 timer_attach(void)
 {
-	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC, BOOT_CAPTBL_SELF_INITRCV_BASE);
+//	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC, BOOT_CAPTBL_SELF_INITRCV_BASE);
 	printc("\t%d cycles per microsecond\n", cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE));
 }
 
 void
+wait_timer_calib(void)
+{
+	int cycles;
+
+//	cos_hw_attach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC, BOOT_CAPTBL_SELF_INITRCV_BASE);
+	while ((cycles = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE)) == 0) {
+		int i = 0;
+
+		/* I want to do this because I want to avoid many system calls while timer is calibrated.. */
+		while (i < 100000) i ++;
+	}
+	printc("\t%d cycles per microsecond\n", cycles);
+}
+
+void
 timer_detach(void)
-{ cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC); }
+{
+	int pending;
+	thdid_t  tid;
+	int      rcving;
+	cycles_t cycles;
+
+//	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
+
+	/*
+	 * FIXME: This could block if you've already processed all the events..
+	 * There is no way to know! Timer can fire any moment.. 
+	 */
+//	while ((pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles)) != 0) ;
+}
 
 void
 cos_init(void)
@@ -60,6 +89,8 @@ cos_init(void)
 
 	termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
 	assert(termthd);
+
+	wait_timer_calib();
 
 	PRINTC("\nMicro Booter started.\n");
 	test_run();

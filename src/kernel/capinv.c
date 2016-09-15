@@ -478,6 +478,7 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 		next->state &= ~THD_STATE_PREEMPTED;
 		preempt = 1;
 	} else if (next->state & THD_STATE_RCVING) {
+		//printk("%s:%s:%d\n", __FILE__, __func__, __LINE__);
 		unsigned long a = 0, b = 0;
 
 		assert(!(next->state & THD_STATE_PREEMPTED));
@@ -498,6 +499,7 @@ cap_switch(struct pt_regs *regs, struct thread *curr, struct thread *next, struc
 	cycles_t now;
 
 	/* tcap switch first */
+	//printk("%s:%d\n", __func__, __LINE__);
 	tcap_budgets_update(cos_info, curr, next_tcap, &now);
 	tcap_timer_update(cos_info, next_tcap, timeout, now);
 	tcap_current_set(cos_info, next_tcap);
@@ -509,6 +511,7 @@ static int
 cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 	   struct comp_info *ci, struct cos_cpu_local_info *cos_info)
 {
+	//printk("%s:%d\n", __func__, __LINE__);
 	struct thread *next = thd_cap->t;
 	capid_t arcv        = (__userregs_get1(regs) << 16) >> 16;
 	capid_t tc          = __userregs_get1(regs) >> 16;
@@ -527,6 +530,7 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 
 		rcvt = arcv_cap->thd;
 		if (thd_rcvcap_pending(rcvt) > 0) {
+			//printk("%s:%s:%d - %lu:%lu\n", __FILE__, __func__, __LINE__, timeout, TCAP_TIME_NIL);
 			next = rcvt;
 			/* tcap inheritance here...use the current tcap to process events */
 			tc      = 0;
@@ -544,21 +548,16 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 		/* TODO: update prio and timeout */
 	}
 
+	//printk("%s:%s:%d - %lu\n", __FILE__, __func__, __LINE__, timeout);
 	return cap_switch(regs, thd, next, tcap, timeout, ci, cos_info);
 }
 
-/**
- * Process the send event, and notify the appropriate end-points.
- * Return the thread that should be executed next.
- */
 static struct thread *
-asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
+notif_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
 	     struct tcap *tcap, struct tcap **tcap_next, int yield)
 {
 	struct thread *next;
 	struct thread *arcv_notif;
-
-	thd_rcvcap_pending_inc(rcv_thd);
 
 	arcv_notif = arcv_thd_notif(rcv_thd);
 	if (arcv_notif) thd_rcvcap_evt_enqueue(arcv_notif, rcv_thd);
@@ -573,6 +572,19 @@ asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
 	}
 
 	return next;
+}
+
+/**
+ * Process the send event, and notify the appropriate end-points.
+ * Return the thread that should be executed next.
+ */
+static struct thread *
+asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
+	     struct tcap *tcap, struct tcap **tcap_next, int yield)
+{
+	thd_rcvcap_pending_inc(rcv_thd);
+
+	return notif_process(rcv_thd, thd, rcv_tcap, tcap, tcap_next, yield);
 }
 
 static inline struct cap_arcv *
@@ -689,12 +701,14 @@ timer_process(struct pt_regs *regs)
 	assert(thd_next && thd_bound2rcvcap(thd_next) && thd_rcvcap_isreferenced(thd_next));
 
 	/* which tcap should we use?  is the current expended? */
+	//printk("%s:%d\n", __func__, __LINE__);
 	if (tcap_budgets_update(cos_info, thd_curr, tc_curr, &now)) {
 		assert(!tcap_is_active(tc_curr) && tcap_expended(tc_curr));
 
 		tc_next  = thd_rcvcap_tcap(thd_next);
 		/* how about the scheduler's tcap? */
 		if (tcap_expended(tc_next)) {
+			//printk("%s:%d\n", __FILE__, __LINE__);
 			/* finally...the active list */
 			tc_next  = tcap_active_next(cos_info);
 			/* in active list?...better have budget */
@@ -704,13 +718,15 @@ timer_process(struct pt_regs *regs)
 		}
 	}
 
-	thd_next = asnd_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
+	thd_next = notif_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
 	if (thd_next == thd_curr && tc_next == tc_curr) return 1;
 
-	thd_curr->state |= THD_STATE_PREEMPTED;
+	//printk("%s:%s:%d\n", __FILE__, __func__, __LINE__);
 	/* update tcaps, and timers */
 	tcap_timer_update(cos_info, tc_next, TCAP_TIME_NIL, now);
 	tcap_current_set(cos_info, tc_next);
+	if (thd_next == thd_curr) return 1;
+	thd_curr->state |= THD_STATE_PREEMPTED;
 
 	/* switch threads */
  	return cap_thd_switch(regs, thd_curr, thd_next, comp, cos_info);
@@ -720,6 +736,7 @@ static int
 cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	    struct comp_info *ci, struct cos_cpu_local_info *cos_info)
 {
+	//printk("%s:%d\n", __func__, __LINE__);
 	struct thread *next;
 	struct tcap   *tc_next = tcap_current(cos_info);
 

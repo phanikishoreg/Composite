@@ -344,6 +344,11 @@ test_timer(void)
 	int i;
 	thdcap_t tc;
 	cycles_t c = 0, p = 0, t = 0;
+	int pending = 0;
+		thdid_t  tid;
+		int      rcving;
+		cycles_t cycles, now;
+
 
 	PRINTC("Starting timer test.\n");
 	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
@@ -356,9 +361,11 @@ test_timer(void)
 		tcap_time_t timer;
 
 		/* FIXME: we should avoid calling this two times in the common case, return "more evts" */
-		while (cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles) != 0) ;
+		while ((pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles) != 0)) ;
+
 		rdtscll(now);
 		timer = tcap_cyc2time(now + 1000 * cyc_per_usec);
+		//PRINTC("%s:%d - %llu %lu\n", __func__, __LINE__, now + 1000 * cyc_per_usec, timer);
 		cos_switch(tc, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, timer, BOOT_CAPTBL_SELF_INITRCV_BASE);
 		p = c;
 		rdtscll(c);
@@ -366,6 +373,7 @@ test_timer(void)
 	}
 
 	PRINTC("\tCycles per tick (1000 microseconds) = %lld\n", t/16);
+	while ((pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles) != 0)) ;
 
 	PRINTC("Timer test completed.\nSuccess.\n");
 }
@@ -380,6 +388,9 @@ struct budget_test_data {
 	struct exec_cluster p, c;
 } bt;
 
+cycles_t s, e;
+int p = 0;
+int hit_assert = 0;
 static void
 exec_cluster_alloc(struct exec_cluster *e, cos_thd_fn_t fn, void *d, arcvcap_t parentc)
 {
@@ -394,8 +405,21 @@ exec_cluster_alloc(struct exec_cluster *e, cos_thd_fn_t fn, void *d, arcvcap_t p
 static void
 parent(void *d)
 {
-	struct exec_cluster *e = d;
+	struct exec_cluster *x = d;
+	while (1) { 
+		rdtscll(e);
+		p = 1;
+		thdid_t  tid;
+		int      rcving;
+		cycles_t cycles;
 
+		//while (cos_sched_rcv(x->rc, &tid, &rcving, &cycles) != 0) ;
+
+		//cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+		if (cos_switch(BOOT_CAPTBL_SELF_INITTHD_BASE, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_PRIO_MAX, TCAP_RES_INF, BOOT_CAPTBL_SELF_INITRCV_BASE)) assert(0);
+	}
+
+	hit_assert = 1;
 	assert(0);
 }
 
@@ -403,8 +427,8 @@ parent(void *d)
 static void
 test_budgets(void)
 {
-	cycles_t s, e;
 	int i;
+	cycles_t nw;
 
 	PRINTC("Starting budget test.\n");
 
@@ -413,12 +437,30 @@ test_budgets(void)
 
 	PRINTC("Budget switch latencies: ");
 	for (i = 1 ; i < 10 ; i++) {
-		if (cos_tcap_transfer(bt.c.rc, BOOT_CAPTBL_SELF_INITTCAP_BASE, i * 100000, TCAP_PRIO_MAX + 2)) assert(0);
+		tcap_res_t res = 100000;
+		int pending = 0;
+		thdid_t  tid;
+		int      rcving;
+		cycles_t cycles, now;
 
+
+		if (cos_tcap_transfer(bt.c.rc, BOOT_CAPTBL_SELF_INITTCAP_BASE, res, TCAP_PRIO_MAX + 2)) assert(0);
+
+		rdtscll(nw);
+//		PRINTC("%s:%d - %llu %llu %lu\n", __func__, __LINE__, tcap_time2cyc(res, nw), nw, res);
+
+//		PRINTC("before switch %d\n", i);
+
+		if (hit_assert) break;
 		rdtscll(s);
 		if (cos_switch(bt.c.tc, bt.c.tcc, TCAP_PRIO_MAX + 2, TCAP_RES_INF, BOOT_CAPTBL_SELF_INITRCV_BASE)) assert(0);
-		rdtscll(e);
-		PRINTC("%lld,\t", e-s);
+		if (p == 0) rdtscll(e);
+		else p = 0;
+//		PRINTC("after switch %d\n", i);
+//		PRINTC("%s:%d -%lu %llu %llu %llu\n", __func__, __LINE__, res, e, s, e-s);
+		PRINTC("%s:%d - %llu=%lu\n", __func__, __LINE__, e-s, (res));
+
+		pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
 	}
 	PRINTC("\n");
 }
@@ -533,10 +575,13 @@ test_captbl_expand(void)
 void
 test_run(void)
 {
-	timer_attach();
-	timer_detach();
+//	timer_attach();
+//	timer_detach();
 	test_timer();
 	test_budgets();
+
+//	test_budgets_multilevel();
+	while (1) ;
 
 	/*
 	 * It is ideal to ubenchmark kernel API with timer interrupt detached,

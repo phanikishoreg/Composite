@@ -60,6 +60,7 @@ static volatile u32_t *hpet_capabilities;
 static volatile u64_t *hpet_config;
 static volatile u64_t *hpet_interrupt;
 static void *hpet;
+//static volatile cycles_t timeout;
 
 volatile struct hpet_timer {
 		u64_t config;
@@ -88,8 +89,8 @@ volatile struct hpet_timer {
 
 #define PICO_PER_MICRO           1000000UL
 #define FEMPTO_PER_PICO          1000UL
-#define TIMER_CALIBRATION_ITER   16
-#define TIMER_ERROR_BOUND_FACTOR 128
+#define TIMER_CALIBRATION_ITER   256
+#define TIMER_ERROR_BOUND_FACTOR 256
 static int timer_calibration_init = 1;
 static unsigned long timer_cycles_per_hpetcyc = TIMER_ERROR_BOUND_FACTOR;
 static unsigned long cycles_per_tick;
@@ -97,19 +98,53 @@ static unsigned long hpetcyc_per_tick;
 #define ULONG_MAX 4294967295UL
 
 static inline u64_t
-timer_cpu2hpet_cycles(u64_t cycles)
+timer_cpu2hpet_cycles_print(u64_t cycles)
 {
 	unsigned long cyc;
 
+	printk("%s: %llu ", __func__, cycles);
 	/* demote precision to enable word-sized math */
 	cyc    = (unsigned long)cycles;
+	printk("%lu ", cyc);
 	if (unlikely((u64_t)cyc < cycles)) cyc = ULONG_MAX;
 	/* convert from CPU cycles to HPET cycles */
 	cyc    = (cyc / timer_cycles_per_hpetcyc) * TIMER_ERROR_BOUND_FACTOR;
 	/* promote the precision to interact with the hardware correctly */
 	cycles = cyc;
-
+	printk("%llu %lu\n", cycles, cyc);
 	return cycles;
+}
+
+static inline u64_t
+timer_cpu2hpet_cycles(u64_t cycles)
+{
+	unsigned long cyc;
+
+	//printk("%s: %llu ", __func__, cycles);
+	/* demote precision to enable word-sized math */
+	cyc    = (unsigned long)cycles;
+	//printk("%lu ", cyc);
+	if (unlikely((u64_t)cyc < cycles)) cyc = ULONG_MAX;
+	/* convert from CPU cycles to HPET cycles */
+	cyc    = (cyc / timer_cycles_per_hpetcyc) * TIMER_ERROR_BOUND_FACTOR;
+	/* promote the precision to interact with the hardware correctly */
+	cycles = cyc;
+	//printk("%llu %lu\n", cycles, cyc);
+	return cycles;
+}
+
+static void
+timer_disable(timer_type_t timer_type)
+{
+	/* Disable timer interrupts */
+	*hpet_config ^= ~1;
+
+	/* Reset main counter */
+	hpet_timers[timer_type].config = 0;
+	hpet_timers[timer_type].compare = 0;
+
+	/* Enable timer interrupts */
+	*hpet_config |= 1;
 }
 
 static void
@@ -129,8 +164,12 @@ timer_calibration(void)
 
 		/* Possibly significant rounding error here.  Bound by the factor */
 		timer_cycles_per_hpetcyc = (TIMER_ERROR_BOUND_FACTOR * cycles_per_tick) / hpetcyc_per_tick;
-		printk("Timer calibrated:\n\tCPU cycles per HPET tick: %ld\n\tHPET ticks in %d us: %ld\n",
-		       timer_cycles_per_hpetcyc/TIMER_ERROR_BOUND_FACTOR, TIMER_DEFAULT_US_INTERARRIVAL, hpetcyc_per_tick);
+		printk("Timer calibrated:\n\tCPU cycles (%d-%lld:%ld)per HPET tick: %ld\n\tHPET ticks in %d us: %ld\n",
+		       cnt, tot, cycles_per_tick, timer_cycles_per_hpetcyc/TIMER_ERROR_BOUND_FACTOR, TIMER_DEFAULT_US_INTERARRIVAL, hpetcyc_per_tick);
+
+		timer_disable(TIMER_PERIODIC);
+		timer_disable(TIMER_PERIODIC);
+		//timer_set(TIMER_ONESHOT, (cycles_t)(~0ULL));
 	}
 	cnt++;
 }
@@ -142,7 +181,7 @@ chal_cyc_usec(void)
 int
 periodic_handler(struct pt_regs *regs)
 {
-	int preempt;
+	int preempt = 1;
 
 	if (unlikely(timer_calibration_init)) timer_calibration();
 
@@ -158,8 +197,14 @@ extern int timer_process(struct pt_regs *regs);
 int
 oneshot_handler(struct pt_regs *regs)
 {
+//	static int count;
 	int preempt = 1;
+//	cycles_t now;
+//	count ++;
 
+//	if (count > 16) printk("%d ", count);
+//	rdtscll(now);
+//	printk("%llu %llu\n", timeout, now);
 	ack_irq(HW_ONESHOT);
 	preempt = timer_process(regs);
 	HPET_INT_ENABLE(TIMER_ONESHOT);
@@ -171,7 +216,6 @@ void
 timer_set(timer_type_t timer_type, u64_t cycles)
 {
 	u64_t outconfig = TN_INT_TYPE_CNF | TN_INT_ENB_CNF;
-	int timer = 0;
 
 	cycles = timer_cpu2hpet_cycles(cycles);
 
@@ -180,17 +224,23 @@ timer_set(timer_type_t timer_type, u64_t cycles)
 
 	/* Reset main counter */
 	if (timer_type == TIMER_ONESHOT) {
+		//printk("Cycles: %llu\n", cycles);
+	//	hpet_timers[TIMER_PERIODIC].config = 0;
+		/* FIXME: Don't want to get/set this everytime. */
 		/* Set a static value to count up to */
-		timer = 1;
-		hpet_timers[timer].config = outconfig;
+		hpet_timers[timer_type].config     = outconfig;
 		cycles += HPET_COUNTER;
+//		printk("HPET: %llu Cycles: %llu\n", HPET_COUNTER, cycles);
 	} else {
+		/* FIXME: Don't want to get/set this everytime. */
+	//	hpet_timers[TIMER_ONESHOT].config = 0;
 		/* Set a periodic value */
-		hpet_timers[timer].config = outconfig | TN_TYPE_CNF | TN_VAL_SET_CNF;
+		hpet_timers[timer_type].config    = outconfig | TN_TYPE_CNF | TN_VAL_SET_CNF;
 		/* Reset main counter */
 		HPET_COUNTER = 0x00;
 	}
-	hpet_timers[timer].compare = cycles;
+	hpet_timers[timer_type].compare = cycles;
+//	timeout = cycles;
 
 	/* Enable timer interrupts */
 	*hpet_config |= 1;
@@ -200,6 +250,7 @@ timer_set(timer_type_t timer_type, u64_t cycles)
 void
 chal_timer_set(cycles_t cycles)
 {
+//	timer_cpu2hpet_cycles_print(cycles);
 	timer_set(TIMER_ONESHOT, cycles);
 	timer_set(TIMER_ONESHOT, cycles);
 }
@@ -252,7 +303,10 @@ timer_init(void)
 	pico_per_hpetcyc = hpet_capabilities[1]/FEMPTO_PER_PICO; /* bits 32-63 are # of femptoseconds per HPET clock tick */
 	hpetcyc_per_tick = (TIMER_DEFAULT_US_INTERARRIVAL * PICO_PER_MICRO) / pico_per_hpetcyc;
 
-	printk("Enabling timer @ %p with tick granularity %ld picoseconds\n", hpet, pico_per_hpetcyc);
+	//hpetcyc_per_tick = (PICO_PER_MICRO) / pico_per_hpetcyc;
+	//hpetcyc_per_tick *= TIMER_DEFAULT_US_INTERARRIVAL;
+
+	printk("Enabling timer @ %p with tick granularity %lu:%ld picoseconds(%ld)\n", hpet, hpet_capabilities[1], pico_per_hpetcyc, hpetcyc_per_tick);
 	/* Enable legacy interrupt routing */
 	*hpet_config |= (1ll);
 
