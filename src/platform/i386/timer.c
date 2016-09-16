@@ -88,8 +88,8 @@ volatile struct hpet_timer {
 
 #define PICO_PER_MICRO           1000000UL
 #define FEMPTO_PER_PICO          1000UL
-#define TIMER_CALIBRATION_ITER   16
-#define TIMER_ERROR_BOUND_FACTOR 128
+#define TIMER_CALIBRATION_ITER   256
+#define TIMER_ERROR_BOUND_FACTOR 256
 static int timer_calibration_init = 1;
 static unsigned long timer_cycles_per_hpetcyc = TIMER_ERROR_BOUND_FACTOR;
 static unsigned long cycles_per_tick;

@@ -61,6 +61,10 @@ cos_init(void)
 	termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
 	assert(termthd);
 
+
+	while (cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE) == 0) ;
+	PRINTC("\t%d cycles per microsecond\n", cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE));
+
 	PRINTC("\nMicro Booter started.\n");
 	test_run();
 	PRINTC("\nMicro Booter done.\n");

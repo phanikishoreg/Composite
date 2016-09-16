@@ -476,8 +476,8 @@ test_timer_perf(void)
 	cos_thd_switch(tc);
 
 	for (i = 0 ; i < ITER ; i++) {
-		cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
 		rdtscll(end_cycles);
+		cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
 
 		total_cycles += (end_cycles - spinner_cycles);
 		cos_thd_switch(tc);
@@ -619,27 +619,83 @@ test_captbl_expand(void)
 	PRINTC("Captbl expand SUCCESS.\n");
 }
 
+
+static void
+spin(void)
+{
+#define SPIN_ITERS 0x7FFFFFFF 
+	long long threshold_cycles = 9000;
+	long long threshold_int_cycles = 2000, int_cycles = 0;
+	long long curr_cycles = 0, prev_cycles = 0, diff_cycles;
+	long long max_diff_cycles = 0, min_diff_cycles = 0;//, intr_cycles = 0;
+	long long count_max = 0, count_int = 0;
+	long long count_x = 0, count_y = 0, count_z = 0;
+	long long min_max_cycles = 0, min_min_cycles = 0;
+	long i;
+#if 0
+	for (i = 0 ; i < SPIN_ITERS ; i ++) {
+		diff_cycles[i] = 0;
+	}
+	rdtscll(prev_cycles);
+
+	for (i = 0 ; i < SPIN_ITERS ; i ++) {
+		rdtscll(curr_cycles);
+		diff_cycles[i] = (curr_cycles - prev_cycles);
+		prev_cycles = curr_cycles;
+		if (max_diff_cycles < diff_cycles[i]) max_diff_cycles = diff_cycles[i];
+		if (diff_cycles[i] > 1000 && diff_cycles[i] < max_diff_cycles) intr_cycles = diff_cycles[i];
+	}
+
+	for (i = 0 ; i < SPIN_ITERS ; i ++) {
+		//PRINTC("%lld ", diff_cycles[i]);
+	}
+#endif	
+	rdtscll(prev_cycles);
+	min_diff_cycles = min_min_cycles = prev_cycles;
+
+	for (i = 0; i < SPIN_ITERS ; i ++) {
+		rdtscll(curr_cycles);
+		diff_cycles = (curr_cycles - prev_cycles);
+		prev_cycles = curr_cycles;
+
+		if (max_diff_cycles < diff_cycles) max_diff_cycles = diff_cycles;
+		if (diff_cycles > threshold_int_cycles && min_diff_cycles > diff_cycles) { min_diff_cycles = diff_cycles; count_max ++; }
+		if (diff_cycles > threshold_int_cycles && diff_cycles < threshold_cycles) { int_cycles = diff_cycles; count_int ++; }
+		if (diff_cycles <= threshold_int_cycles) {
+				count_z ++;
+				if (diff_cycles > min_max_cycles) { min_max_cycles = diff_cycles; count_x ++; }
+				if (diff_cycles < min_min_cycles) { min_min_cycles = diff_cycles; count_y ++; }
+		}
+		
+	//	if (diff_cycles > 1000 && diff_cycles < max_diff_cycles) intr_cycles = diff_cycles;
+	}
+	PRINTC("int:%lld:%lld max:%lld:%lld min:%lld\n", int_cycles, count_int, max_diff_cycles, count_max, min_diff_cycles);
+	PRINTC("%lld:%lld, %lld:%lld %lld\n", min_max_cycles, count_x, min_min_cycles, count_y, count_z);
+	while (1);
+}
+
 void
 test_run(void)
 {
-	timer_attach();
-	test_timer();
-	test_timer_perf();
-	timer_detach();
+//	timer_attach();
+//	test_timer();
+//	test_timer_perf();
+//	timer_detach();
+	spin();
 
 	/* 
 	 * It is ideal to ubenchmark kernel API with timer interrupt detached,
 	 * Not so much for unit-tests
 	 */
-	test_tcaps_perf();
+//	test_tcaps_perf();
 
 //	test_thds();
-	test_thds_perf();
+//	test_thds_perf();
 
 //	test_mem();
 
 //	test_async_endpoints();
-	test_async_endpoints_perf();
+//	test_async_endpoints_perf();
 
 //	test_inv();
 //	test_inv_perf(0);
