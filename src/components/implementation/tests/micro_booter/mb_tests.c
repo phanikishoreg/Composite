@@ -382,6 +382,7 @@ struct exec_cluster {
 	thdcap_t  tc;
 	arcvcap_t rc;
 	tcap_t    tcc;
+	cycles_t  cyc;
 };
 
 struct budget_test_data {
@@ -400,6 +401,10 @@ exec_cluster_alloc(struct exec_cluster *e, cos_thd_fn_t fn, void *d, arcvcap_t p
 	assert(e->tc);
 	e->rc = cos_arcv_alloc(&booter_info, e->tc, e->tcc, booter_info.comp_cap, parentc);
 	assert(e->rc);
+
+	PRINTC("%s:%d %x thd %x\n", __func__, __LINE__, (unsigned)e, cos_introspect(&booter_info, e->tc, THD_GET_TID));
+	//rdtscll(e->cyc);
+	e->cyc = 0;
 }
 
 static void
@@ -461,6 +466,63 @@ test_budgets(void)
 		PRINTC("%s:%d - %llu=%lu\n", __func__, __LINE__, e-s, (res));
 
 		pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
+	}
+	PRINTC("\n");
+}
+
+struct multilevel_budget_test_data {
+	struct exec_cluster p, c, g;
+} mbt;
+
+static void
+spinner_cyc(void *d)
+{
+	cycles_t *p = &(((struct exec_cluster *)d)->cyc);
+	while (1) rdtscll(*p);
+}
+
+
+static void
+test_budgets_multilevel(void)
+{
+	int i;
+	PRINTC("Starting budget test for multiple levels..\n");
+
+	exec_cluster_alloc(&mbt.p, spinner_cyc,  &mbt.p, BOOT_CAPTBL_SELF_INITRCV_BASE);
+	exec_cluster_alloc(&mbt.c, spinner_cyc, &mbt.c, mbt.p.rc);
+	exec_cluster_alloc(&mbt.g, spinner_cyc, &mbt.g, mbt.c.rc);
+
+	PRINTC("Budget switch latencies: ");
+	for (i = 1 ; i < 10 ; i++) {
+		tcap_res_t res = 1600000;
+		int pending = 0;
+		thdid_t  tid;
+		int      rcving;
+		cycles_t cycles, now;
+
+		if (cos_tcap_transfer(mbt.p.rc, BOOT_CAPTBL_SELF_INITTCAP_BASE, res, TCAP_PRIO_MAX + 2)) assert(0);
+		if (cos_tcap_transfer(mbt.c.rc, mbt.p.tcc, res/2, TCAP_PRIO_MAX + 2)) assert(0);
+		if (cos_tcap_transfer(mbt.g.rc, mbt.c.tcc, res/4, TCAP_PRIO_MAX + 2)) assert(0);
+
+//		PRINTC("%s:%d - %llu %llu %lu\n", __func__, __LINE__, tcap_time2cyc(res, nw), nw, res);
+
+//		PRINTC("before switch %d\n", i);
+
+		rdtscll(s);
+		if (cos_switch(mbt.g.tc, mbt.g.tcc, TCAP_PRIO_MAX + 2, TCAP_RES_INF, BOOT_CAPTBL_SELF_INITRCV_BASE)) assert(0);
+		if (p == 0) rdtscll(e);
+		else p = 0;
+//		PRINTC("after switch %d\n", i);
+//		PRINTC("%s:%d -%lu %llu %llu %llu\n", __func__, __LINE__, res, e, s, e-s);
+		PRINTC("%s:%d - %llu=%lu\n", __func__, __LINE__, e-s, (res));
+		PRINTC("grandchild:%llu child:%llu parent:%llu init:%llu\n", mbt.g.cyc - s, mbt.c.cyc - s, mbt.p.cyc - s, e - s);
+
+		pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
+		PRINTC("Tid:%x, rcving:%x cycles:%llu\n", tid, rcving, cycles);
+		pending = cos_sched_rcv(mbt.p.rc, &tid, &rcving, &cycles);
+		PRINTC("Tid:%x, rcving:%x cycles:%llu\n", tid, rcving, cycles);
+		pending = cos_sched_rcv(mbt.c.rc, &tid, &rcving, &cycles);
+		PRINTC("Tid:%x, rcving:%x cycles:%llu\n", tid, rcving, cycles);
 	}
 	PRINTC("\n");
 }
@@ -573,6 +635,13 @@ test_captbl_expand(void)
 }
 
 void
+spin_finite(void)
+{
+	int i = 0x7fffffff;
+	while (i > 0) i --;
+}
+
+void
 test_run(void)
 {
 //	timer_attach();
@@ -580,7 +649,9 @@ test_run(void)
 	test_timer();
 	test_budgets();
 
-//	test_budgets_multilevel();
+	spin_finite();
+
+	test_budgets_multilevel();
 	while (1) ;
 
 	/*

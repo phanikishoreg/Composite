@@ -83,6 +83,10 @@ static inline struct tcap_sched_info *
 tcap_sched_info(struct tcap *t)
 { return &t->delegations[t->curr_sched_off]; }
 
+static inline int
+tcap_uid(struct tcap *t)
+{ return (t->delegations[t->curr_sched_off]).tcap_uid; }
+
 static inline void
 tcap_ref_take(struct tcap *t)
 { t->refcnt++; }
@@ -218,9 +222,13 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_t
 	//printk("%s:%d = timer:%llu cos_info->timeout_next:%lu\n", __FILE__, __LINE__, timer, cos_info->timeout_next); 
 	if (cycles_same(cos_info->timeout_next, timer)) return;
 
-	//printk("%s:%d = %lld\n", __FILE__, __LINE__, timer-now);
+//	timeout_cyc = ((timer - now) >> 5); //additional 3%
+//	timeout_cyc += (timer - now);
+//	printk("%s:%d = %llu: %llu\n", __FILE__, __LINE__, timer-now, timeout_cyc);
+//	chal_timer_set(timeout_cyc);
 	chal_timer_set(timer - now);
 	cos_info->timeout_next = timer;
+	//cos_info->timeout_next = now + timeout_cyc;
 }
 
 static inline void

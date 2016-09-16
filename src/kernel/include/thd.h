@@ -146,8 +146,15 @@ thd_rcvcap_isroot(struct thread *t)       { return t == t->rcvcap.rcvcap_thd_not
 static inline struct thread *
 thd_rcvcap_sched(struct thread *t)
 {
-	if (thd_rcvcap_isreferenced(t)) return t;
-	return t->rcvcap.rcvcap_thd_notif;
+	if (thd_rcvcap_isreferenced(t)) {
+//		printk("%s:%d\n", __func__, __LINE__);
+		return t;
+	}
+//	printk("%s:%d\n", __func__, __LINE__);
+	
+//	if (t->rcvcap.rcvcap_thd_notif)
+		return t->rcvcap.rcvcap_thd_notif;
+//	else return t;
 }
 
 static void

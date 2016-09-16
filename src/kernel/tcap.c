@@ -33,6 +33,7 @@ __tcap_init(struct tcap *t, tcap_prio_t prio)
 	t->cpuid                   = get_cpuid();
 	t->ndelegs                 = 1;
 	t->delegations[0].tcap_uid = (*uid)++;
+//	printk("%s:%d - %x\n", __func__, __LINE__, t->delegations[0].tcap_uid);
 	t->curr_sched_off          = 0;
 	t->refcnt                  = 1;
 	t->arcv_ep                 = NULL;
@@ -76,7 +77,7 @@ __tcap_budget_xfer(struct tcap *d, struct tcap *s, tcap_res_t cycles)
 	if (!TCAP_RES_IS_INF(bd->cycles)) bd->cycles += cycles;
 	if (!TCAP_RES_IS_INF(bs->cycles)) bs->cycles -= cycles;
 done:
-	if (!tcap_is_active(d)) tcap_active_add_after(s, d);
+	if (!tcap_is_active(d)) tcap_active_add_before(s, d);
 	if (tcap_expended(s))   tcap_active_rem(s);
 	//printk("%s:%d - %lu\n", __func__, __LINE__, bd->cycles);
 

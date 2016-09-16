@@ -499,10 +499,11 @@ cap_switch(struct pt_regs *regs, struct thread *curr, struct thread *next, struc
 	cycles_t now;
 
 	/* tcap switch first */
-	//printk("%s:%d\n", __func__, __LINE__);
+	//printk("%s:%d curr: %x next: %x\n", __func__, __LINE__, curr->tid, next->tid);
 	tcap_budgets_update(cos_info, curr, next_tcap, &now);
 	tcap_timer_update(cos_info, next_tcap, timeout, now);
 	tcap_current_set(cos_info, next_tcap);
+
 
 	return cap_thd_switch(regs, curr, next, ci, cos_info);
 }
@@ -564,6 +565,7 @@ notif_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
 
 	/* The thread switch decision: */
 	if (yield || tcap_higher_prio(rcv_tcap, tcap)) {
+		//printk("%s:%d \n", __func__, __LINE__);
 		next        = rcv_thd;
 		*tcap_next  = rcv_tcap;
 	} else {
@@ -699,31 +701,39 @@ timer_process(struct pt_regs *regs)
 	/* get the scheduler thread */
 	thd_next = thd_rcvcap_sched(tcap_rcvcap_thd(tc_curr));
 	assert(thd_next && thd_bound2rcvcap(thd_next) && thd_rcvcap_isreferenced(thd_next));
+	//printk("%s:%d curr: %x:%x next:%x:%x\n", __func__, __LINE__, thd_curr->tid, tcap_uid(tc_curr), thd_next->tid, tcap_uid(tc_next));
 
 	/* which tcap should we use?  is the current expended? */
 	//printk("%s:%d\n", __func__, __LINE__);
 	if (tcap_budgets_update(cos_info, thd_curr, tc_curr, &now)) {
 		assert(!tcap_is_active(tc_curr) && tcap_expended(tc_curr));
 
+	//	printk("%s:%d - %x\n", __func__, __LINE__, tcap_uid(tc_curr));
 		tc_next  = thd_rcvcap_tcap(thd_next);
+	//	printk("%s:%d - %x\n", __func__, __LINE__, tcap_uid(tc_next));
 		/* how about the scheduler's tcap? */
 		if (tcap_expended(tc_next)) {
-			//printk("%s:%d\n", __FILE__, __LINE__);
+			//printk("%s:%d\n", __func__, __LINE__);
 			/* finally...the active list */
 			tc_next  = tcap_active_next(cos_info);
 			/* in active list?...better have budget */
 			assert(tc_next && !tcap_expended(tc_next));
 			/* and the next thread should be the scheduler of this tcap */
 			thd_next = thd_rcvcap_sched(tcap_rcvcap_thd(tc_next));
+	//		printk("%s:%d curr: %x:%x next:%x:%x\n", __func__, __LINE__, thd_curr->tid, tcap_uid(tc_curr), thd_next->tid, tcap_uid(tc_next));
 		}
 	}
 
 	thd_next = notif_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
+//	if (tc_next == tc_curr) printk("%s:%d\n", __func__, __LINE__);
+	//printk("%s:%d next:%x:%x\n", __func__, __LINE__, thd_next->tid, tcap_uid(tc_next));
 	if (thd_next == thd_curr && tc_next == tc_curr) return 1;
 
+	//printk("%s:%d next:%x:%x\n", __func__, __LINE__, thd_next->tid, tcap_uid(tc_next));
 	//printk("%s:%s:%d\n", __FILE__, __func__, __LINE__);
 	/* update tcaps, and timers */
 	tcap_timer_update(cos_info, tc_next, TCAP_TIME_NIL, now);
+	//printk("%s:%d next:%x:%x\n", __func__, __LINE__, thd_next->tid, tcap_uid(tc_next));
 	tcap_current_set(cos_info, tc_next);
 	if (thd_next == thd_curr) return 1;
 	thd_curr->state |= THD_STATE_PREEMPTED;
