@@ -59,7 +59,8 @@ cos_init(void)
 	test_run_mb();
 	PRINTC("\nMicro Booter done.\n");
 
-	cos_thd_switch(termthd);
+	SPIN();
+	//cos_thd_switch(termthd);
 
 	return;
 }
