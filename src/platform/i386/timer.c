@@ -96,6 +96,13 @@ static unsigned long cycles_per_tick;
 static unsigned long hpetcyc_per_tick;
 #define ULONG_MAX 4294967295UL
 
+#define TEST_ITERS 1000
+static u64_t oneshot_req_cycs, oneshot_prog_cycs;
+static unsigned long oneshot_fire_avg_cycs;
+static unsigned long avg, iters, total_iters;
+static u64_t st, en;
+
+
 static inline u64_t
 timer_cpu2hpet_cycles(u64_t cycles)
 {
@@ -175,7 +182,15 @@ extern int timer_process(struct pt_regs *regs);
 int
 oneshot_handler(struct pt_regs *regs)
 {
+	//static unsigned iters;
+	//u64_t now;
 	int preempt = 1;
+
+	//rdtscll(now);
+	///* works only if programmed like a periodic timer.. */
+	//oneshot_fire_avg_cycs += (unsigned long)(now - oneshot_prog_cycs);
+	//iters ++;
+	//if (iters > TEST_ITERS) printk("last req: %llu, average oneshots: %lu\n", oneshot_req_cycs, (oneshot_fire_avg_cycs) / iters);
 
 	ack_irq(HW_ONESHOT);
 	preempt = timer_process(regs);
@@ -183,14 +198,17 @@ oneshot_handler(struct pt_regs *regs)
 
 	return preempt;
 }
+#define TEST_ONESHOT_ITERS 200000
 
 void
 timer_set(timer_type_t timer_type, u64_t cycles)
 {
 	u64_t outconfig = TN_INT_TYPE_CNF | TN_INT_ENB_CNF;
 
+//	oneshot_req_cycs = cycles;
 	cycles = timer_cpu2hpet_cycles(cycles);
 
+	rdtscll(st);
 	/* Disable timer interrupts */
 	*hpet_config ^= ~1;
 
@@ -209,14 +227,46 @@ timer_set(timer_type_t timer_type, u64_t cycles)
 
 	/* Enable timer interrupts */
 	*hpet_config |= 1;
+	//rdtscll(oneshot_prog_cycs);
+	rdtscll(en);
+	rdtscll(en);
+	avg += (unsigned long) (en - st);
+	iters ++; total_iters ++;
+	if (iters == TEST_ONESHOT_ITERS) {
+		printk("%lu-%lu: %lu\n", total_iters, iters, (avg/iters));
+		iters = 0;
+		avg = 0;
+	}
+
+
 }
+
 
 /* FIXME:  This is broken. Why does setting the oneshot twice make it work? */
 void
 chal_timer_set(cycles_t cycles)
 {
+	//u64_t before, after;
+	//static unsigned long avg, iters, total_iters;
+
+	//if (iters == TEST_ONESHOT_ITERS) {
+	//	printk("%lu-%lu: %lu\n", total_iters, iters, (avg/iters));
+	//	iters = 0;
+	//	avg = 0;
+	//}
+
+	//rdtscll(before);
 	timer_set(TIMER_ONESHOT, cycles);
+	//rdtscll(after);
+	//avg += (unsigned long)(after - before);
+	//rdtscll(before);
 	timer_set(TIMER_ONESHOT, cycles);
+	////rdtscll(before);
+	//rdtscll(after);
+	//avg += (unsigned long)(after - before);
+	////avg += (unsigned long)(before - after);
+	//iters +=2;
+	//total_iters +=2;
 }
 
 u64_t

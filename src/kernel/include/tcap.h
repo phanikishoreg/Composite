@@ -162,13 +162,28 @@ tcap_current_set(struct cos_cpu_local_info *cos_info, struct tcap *t)
 /* hack to avoid header file recursion */
 void __thd_exec_add(struct thread *t, cycles_t cycles);
 
+#define TEST_SET_ITERS 100000
 static inline int
 tcap_budgets_update(struct cos_cpu_local_info *cos_info, struct thread *t, struct tcap *next, cycles_t *now)
 {
 	cycles_t cycles, expended;
 	struct tcap *curr = tcap_current(cos_info);
 
+	//static cycles_t before=0, after=0;
+	//static unsigned long average = 0;
+	//static unsigned int iters = 0, total_iters = 0;
+	//before = tsc();
 	cycles =  *now   = tsc();
+	//after = tsc();
+	//average += (unsigned long)(after - before);
+	//iters ++;
+	//total_iters ++;
+	//if (iters == TEST_SET_ITERS) { 
+	//	printk("%u-%u: %lu\n", total_iters, iters, (average/iters));
+	//	iters = 0;
+	//	average = 0;
+	//}
+
 	expended         = cycles - cos_info->cycles;
 	cos_info->cycles = cycles;
 	__thd_exec_add(t, expended);
@@ -176,6 +191,7 @@ tcap_budgets_update(struct cos_cpu_local_info *cos_info, struct thread *t, struc
 
 	return tcap_expended(curr);
 }
+
 
 /*
  * Update the current tcap's (@next's) cycle count, set the next
@@ -185,6 +201,9 @@ tcap_budgets_update(struct cos_cpu_local_info *cos_info, struct thread *t, struc
 static inline void
 tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_time_t timeout, cycles_t now)
 {
+	//static cycles_t before=0, after=0;
+	//static unsigned long average = 0;
+	//static unsigned long iters = 0, total_iters = 0;
 	cycles_t timer, timeout_cyc;
 	tcap_res_t left;
 
@@ -205,7 +224,17 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_t
 	/* avoid the large costs of setting the timer hardware if possible */
 	if (cycles_same(cos_info->timeout_next, timer)) return;
 
+	//before = tsc();
 	chal_timer_set(timer - now);
+	//after = tsc();
+	//average += (unsigned long)(after - before);
+	//iters ++;
+	//total_iters ++;
+	//if (iters == TEST_SET_ITERS) { 
+	//	printk("%lu-%lu: %lu\n", total_iters, iters, (average/iters));
+	//	iters = 0;
+	//	average = 0;
+	//}
 	cos_info->timeout_next = timer;
 }
 

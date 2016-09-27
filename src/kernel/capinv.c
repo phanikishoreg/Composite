@@ -690,6 +690,8 @@ timer_process(struct pt_regs *regs)
 	unsigned long     ip, sp;
 	cycles_t          now;
 
+	printk("%s: You've something wrong going on with you..\n", __func__);
+	assert(0);
 	cos_info = cos_cpu_local_info();
 	assert(cos_info);
 	thd_curr = thd_current(cos_info);
