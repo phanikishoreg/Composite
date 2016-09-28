@@ -93,7 +93,7 @@ lapic_set_timer(int timer_type, cycles_t deadline)
 	assert (timer_type != PERIODIC);
 
 	rdtscll(now);
-	if (deadline <= now) return;
+//	if (deadline <= now) return;
 
 	if (timer_type == ONESHOT) {
 
