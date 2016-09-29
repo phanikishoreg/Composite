@@ -163,6 +163,14 @@ lapic_timer_init(void)
 {
 	u32_t low, high;
 
+	u32_t a, b, c, d;
+
+	chal_cpuid(0x15, &a, &b, &c, &d);
+	printk("a:%u, b:%u c:%u, d:%u\n", a, b, c, d);
+
+	chal_cpuid(0x16, &a, &b, &c, &d);
+	printk("a:%u, b:%u c:%u, d:%u\n", a, b, c, d);
+
 	if (!lapic_tscdeadline_supported()) {
 		printk("LAPIC: TSC-Deadline Mode not supported! Configuring Oneshot Mode!\n");
 

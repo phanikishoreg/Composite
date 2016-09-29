@@ -207,7 +207,7 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_t
 		else                                                 timer = timeout_cyc;
 	}
 	/* avoid the large costs of setting the timer hardware if possible */
-	if (cycles_same(cos_info->timeout_next, timer)) return;
+	//if (cycles_same(cos_info->timeout_next, timer)) return;
 
 	//before = tsc();
 	chal_timer_set(timer);

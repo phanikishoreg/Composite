@@ -51,7 +51,7 @@ test_thds_perf(int with_hpet_prog)
 	rdtscll(end_swt_cycles);
 	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
 
-	PRINTC("Average THD SWTCH %s (Total: %lld / Iterations: %lld ): %lld\n", hpet_overhead_test ? "w/ HPET" : "w/o HPET",
+	PRINTC("Average THD SWTCH %s (Total: %lld / Iterations: %lld ): %lld\n", hpet_overhead_test ? "w/ APIC" : "w/o APIC",
 		total_swt_cycles, (long long) ITER, (total_swt_cycles / (long long)ITER));
 }
 
@@ -617,6 +617,7 @@ void
 test_run_mb(void)
 {
 	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
+	while (1) ;
 //	test_timer();
 //	test_budgets();
 
