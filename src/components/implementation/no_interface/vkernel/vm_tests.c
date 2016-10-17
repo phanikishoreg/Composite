@@ -45,7 +45,7 @@ test_tcap_prep(int ndelegs)
 	int i, j, ret;
 
 	if (ndelegs < 4) return;
-	printc("TCAPS-PREP NDELEGS:%d\n", ndelegs);
+	PRINTC("TCAPS-PREP NDELEGS:%d\n", ndelegs);
 
 	for (i = 0 ; i < ndelegs-3 ; i ++) {
 		for (j = 0 ; j < ndelegs-3 ; j ++) {
@@ -81,7 +81,7 @@ test_tcap_deleg(int yield)
 	avg_deleg_cycles = (total_cycles / (long long) ITER);
 	avg_deleg_cycles -= avg_thd_switch_cycles;
 
-	printc("Average Tcap-delegate %s (Iterations: %lld ): %lld\n", yield ? "w/ yield" : "w/o yield",
+	PRINTC("Average Tcap-delegate %s (Iterations: %lld ): %lld\n", yield ? "w/ yield" : "w/o yield",
 		(long long)ITER, avg_deleg_cycles); 
 }
 
@@ -114,7 +114,7 @@ test_thds(void)
 	}
 	total_cycles /= 2;
 	avg_thd_switch_cycles = (total_cycles / (long long) ITER);
-	printc("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
+	PRINTC("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
 		total_cycles, (long long) ITER, avg_thd_switch_cycles);
 }
 
@@ -136,7 +136,7 @@ test_async(void)
 	avg_asnd_cycles = (total_cycles / (long long) ITER);
 	avg_asnd_cycles -= avg_thd_switch_cycles;
 
-	printc("Average ASND w/o Yield (Iterations: %lld ): %lld\n",
+	PRINTC("Average ASND w/o Yield (Iterations: %lld ): %lld\n",
 		(long long) (ITER), avg_asnd_cycles);
 }
 
@@ -158,36 +158,70 @@ test_async_yield(void)
 	avg_asnd_cycles = (total_cycles / (long long) ITER);
 	avg_asnd_cycles -= avg_thd_switch_cycles;
 
-	printc("Average ASND w/ Yield (Iterations: %lld ): %lld\n",
+	PRINTC("Average ASND w/ Yield (Iterations: %lld ): %lld\n",
 		(long long) (ITER), avg_asnd_cycles);
+}
+
+extern void *__inv_test_serverfn(int a, int b, int c);
+
+static inline
+int call_cap_mb(u32_t cap_no, int arg1, int arg2, int arg3)
+{
+	int ret;
+
+	/*
+	 * Which stack should we use for this invocation?  Simple, use
+	 * this stack, at the current sp.  This is essentially a
+	 * function call into another component, with odd calling
+	 * conventions.
+	 */
+	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+
+	__asm__ __volatile__( \
+		"pushl %%ebp\n\t" \
+		"movl %%esp, %%ebp\n\t" \
+		"movl %%esp, %%edx\n\t" \
+		"movl $1f, %%ecx\n\t" \
+		"sysenter\n\t" \
+		"1:\n\t" \
+		"popl %%ebp" \
+		: "=a" (ret)
+		: "a" (cap_no), "b" (arg1), "S" (arg2), "D" (arg3) \
+		: "memory", "cc", "ecx", "edx");
+
+	return ret;
 }
 
 static void
 test_sinv(void)
 {
 	/* TODO: */
-/*	sinvcap_t ic;
+	sinvcap_t ic;
 	int i;
-	long long total_cycles = 0, total_inv_cycles = 0, total_ret_cycles = 0;
+	long long total_inv_cycles = 0;
 
 	ic = cos_sinv_alloc(&vk_info.cinfo, vmx_info[0].cinfo.comp_cap, (vaddr_t)__inv_test_serverfn);
 	assert(ic);
 
 	for (i = 0 ; i < ITER ; i ++) {
-		midinv_cycles = 0;
+		long long start_cycles = 0, end_cycles = 0;
+
 		rdtscll(start_cycles);
 		call_cap_mb(ic, 1, 2, 3);
 		rdtscll(end_cycles);
-		total_inv_cycles += (midinv_cycles - start_cycles);
-		total_ret_cycles += (end_cycles - midinv_cycles);
+		total_inv_cycles += (end_cycles - start_cycles);
 	}
-*/
+
+	PRINTC("Average SINV (Total: %lld / Iterations: %lld ): %lld\n",
+		total_inv_cycles, (long long) (ITER), (total_inv_cycles / (long long)(ITER)));
 }
 
 void
 vk_test_fn(void *d)
 {
 	test_running = 1;
+
+	test_sinv();
 
 	test_thds();
 
