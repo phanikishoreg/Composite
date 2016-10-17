@@ -1,36 +1,57 @@
 #include "micro_booter.h"
 
+cycles_t cyc_per_usec;
+
+#define TIMEOUT_CYCS 10000
+int apic_timer_overhead_test = 0;
 static void
 thd_fn_perf(void *d)
 {
-	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	cycles_t now;
+	tcap_time_t timer;
+
+	rdtscll(now);
+	timer = tcap_cyc2time(now + TIMEOUT_CYCS * cyc_per_usec);
+	cos_switch(BOOT_CAPTBL_SELF_INITTHD_BASE, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_PRIO_MAX, apic_timer_overhead_test ? timer : TCAP_TIME_NIL, BOOT_CAPTBL_SELF_INITRCV_BASE);
 
 	while (1) {
-		cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+		rdtscll(now);
+		timer = tcap_cyc2time(now + TIMEOUT_CYCS * cyc_per_usec);
+		cos_switch(BOOT_CAPTBL_SELF_INITTHD_BASE, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_PRIO_MAX, apic_timer_overhead_test ? timer : TCAP_TIME_NIL, BOOT_CAPTBL_SELF_INITRCV_BASE);
 	}
 	PRINTC("Error, shouldn't get here!\n");
 }
 
 static void
-test_thds_perf(void)
+test_thds_perf(int with_apic_timer_prog)
 {
 	thdcap_t ts;
 	long long total_swt_cycles = 0;
 	long long start_swt_cycles = 0, end_swt_cycles = 0;
 	int i;
+	cycles_t now;
+	tcap_time_t timer;
 
 	ts = cos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn_perf, NULL);
 	assert(ts);
-	cos_thd_switch(ts);
+
+	if (with_apic_timer_prog) apic_timer_overhead_test = 1;
+	else apic_timer_overhead_test = 0;
+
+	rdtscll(now);
+	timer = tcap_cyc2time(now + TIMEOUT_CYCS * cyc_per_usec);
+	cos_switch(ts, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_PRIO_MAX, apic_timer_overhead_test ? timer : TCAP_TIME_NIL, BOOT_CAPTBL_SELF_INITRCV_BASE);
 
 	rdtscll(start_swt_cycles);
 	for (i = 0 ; i < ITER ; i++) {
-		cos_thd_switch(ts);
+		rdtscll(now);
+		timer = tcap_cyc2time(now + TIMEOUT_CYCS * cyc_per_usec);
+		cos_switch(ts, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_PRIO_MAX, apic_timer_overhead_test ? timer : TCAP_TIME_NIL, BOOT_CAPTBL_SELF_INITRCV_BASE);
 	}
 	rdtscll(end_swt_cycles);
 	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
 
-	PRINTC("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
+	PRINTC("Average THD SWTCH %s (Total: %lld / Iterations: %lld ): %lld\n", apic_timer_overhead_test ? "w/ APIC Timer" : "w/o APIC Timer",
 		total_swt_cycles, (long long) ITER, (total_swt_cycles / (long long)ITER));
 }
 
@@ -597,21 +618,23 @@ test_captbl_expand(void)
 void
 test_run_mb(void)
 {
-	test_timer();
-	test_budgets();
+	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
+//	test_timer();
+//	test_budgets();
 
-	test_thds();
-	test_thds_perf();
+//	test_thds();
+	test_thds_perf(0);
+	test_thds_perf(1);
 
-	test_mem();
+//	test_mem();
 
-	test_async_endpoints();
+//	test_async_endpoints();
 	test_async_endpoints_perf();
 
-	test_inv();
+//	test_inv();
 	test_inv_perf();
 
-	test_captbl_expand();
+//	test_captbl_expand();
 }
 
 /*
@@ -625,8 +648,9 @@ test_run_mb(void)
 void
 test_run_vk(void)
 {
+	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 	test_thds();
-	test_thds_perf();
+	test_thds_perf(0);
 
 	test_mem();
 
