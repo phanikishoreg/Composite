@@ -39,6 +39,9 @@ hextol(const char *s)
 
 extern u8_t end; 		/* from the linker script */
 
+#define HACK_REGION_TO_USE 0x00100000
+#define HACK_KMEM_START    0x02603000
+#define HACK_KMEM_MAX      0x30000000
 void
 kern_memory_setup(struct multiboot *mb, u32_t mboot_magic)
 {
@@ -93,16 +96,30 @@ kern_memory_setup(struct multiboot *mb, u32_t mboot_magic)
 		struct multiboot_mem_list *mem = &mems[i];
 		u8_t *mod_end  = glb_memlayout.mod_end;
 		u8_t *mem_addr = chal_pa2va((paddr_t)mem->addr);
+		unsigned long mem_len = mem->len;
 
 		printk("\t- %d (%s): [%08llx, %08llx)\n", i,
 		       mem->type == 1 ? "Available" : "Reserved ", mem->addr, mem->addr + mem->len);
 
-		/* is this the memory region we'll use for component memory? */
-		if (mem->type == 1 && mod_end >= mem_addr && mod_end < (mem_addr + mem->len)) {
-			unsigned long sz = (mem_addr + mem->len) - mod_end;
+		if (mem->addr == HACK_REGION_TO_USE) {
+			printk("\t  using %lx\n", HACK_REGION_TO_USE);
+			mem_addr = chal_pa2va((paddr_t)HACK_KMEM_START);
+			printk("    %lx\n", mem_addr);
+			//mem_len  -= (HACK_KMEM_START - HACK_REGION_TO_USE);
+			mem_len = HACK_KMEM_MAX;
+		//}
 
-			glb_memlayout.kmem_end = mem_addr + mem->len;
+		/* is this the memory region we'll use for component memory? */
+		//if (mem->type == 1 && mod_end >= mem_addr && mod_end < (mem_addr + mem_len)) {
+			unsigned long sz = (mem_addr + mem_len) - mod_end;
+
+			glb_memlayout.kmem_end = mem_addr + mem_len;
 			printk("\t  memory available at boot time: %lx (%ld MB + %ld KB)\n", sz, sz>>20, (sz&((1<<20)-1))>>10);
+
+			if (mem->addr == HACK_REGION_TO_USE) {
+				printk("\t  using %lx\n", HACK_REGION_TO_USE);
+				break;
+			}
 		}
 	}
 	/* FIXME: check memory layout vs. the multiboot memory regions... */
@@ -112,6 +129,7 @@ kern_memory_setup(struct multiboot *mb, u32_t mboot_magic)
 	assert(mem_bootc_end()   <= mem_boot_start());
 	assert(mem_boot_start()  >= mem_kmem_start());
 	assert(mem_kmem_start()  == mem_bootc_start());
+	printk("%lx %lx\n", mem_kmem_end(), mem_boot_end());
 	assert(mem_kmem_end()    >= mem_boot_end());
 	assert(mem_utmem_start() >= mem_kmem_start());
 	assert(mem_utmem_start() >= mem_boot_end());

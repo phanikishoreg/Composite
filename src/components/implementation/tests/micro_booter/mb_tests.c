@@ -720,21 +720,21 @@ test_run_mb(void)
 //	test_timer();
 //	test_budgets();
 
-//	test_intr_latency();
+	test_intr_latency();
 
 //	test_thds();
-//	test_thds_perf(0);
-//	test_thds_perf(1);
+	test_thds_perf(0);
+	test_thds_perf(1);
 
 //	test_mem();
 
 //	test_async_endpoints();
-//	test_async_endpoints_perf();
+	test_async_endpoints_perf();
 
 //	test_inv();
-//	test_inv_perf();
+	test_inv_perf();
 
-	test_tcaps_perf();
+//	test_tcaps_perf();
 
 //	test_captbl_expand();
 }
