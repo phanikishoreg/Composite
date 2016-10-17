@@ -590,6 +590,128 @@ test_captbl_expand(void)
 	PRINTC("Captbl expand SUCCESS.\n");
 }
 
+#define TEST_MAX_DELEGS (TCAP_MAX_DELEGATIONS - 1)
+tcap_t tcs[TEST_MAX_DELEGS];
+thdcap_t thds[TEST_MAX_DELEGS];
+arcvcap_t rcvs[TEST_MAX_DELEGS];
+asndcap_t asnds[TEST_MAX_DELEGS][TEST_MAX_DELEGS];
+long long total_tcap_cycles = 0, start_tcap_cycles = 0, end_tcap_cycles = 0;
+
+static void
+tcap_test_fn(void *d)
+{
+	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	while (1) {
+		rdtscll(end_tcap_cycles);
+		cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	}
+}
+
+static void
+tcap_perf_test_prepare(void)
+{
+	int i, j, ret;
+
+	/* Preperation for tcaps ubenchmarks */
+	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+		tcs[i] = cos_tcap_alloc(&booter_info, TCAP_PRIO_MAX);
+		assert(tcs[i]);
+		
+		thds[i] = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_test_fn, (void *)i);
+		assert(thds[i]);
+		cos_thd_switch(thds[i]);
+
+		rcvs[i] = cos_arcv_alloc(&booter_info, thds[i], tcs[i], booter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+		assert(rcvs[i]);
+
+		ret = cos_tcap_transfer(rcvs[i], BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX);
+		assert(ret == 0);
+	}
+
+	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+		for (j = i + 1 ; j < TEST_MAX_DELEGS ; j ++) {
+
+			asnds[i][j] = cos_asnd_alloc(&booter_info, rcvs[j], booter_info.captbl_cap);
+			assert(asnds[i][j]);
+
+			asnds[j][i] = cos_asnd_alloc(&booter_info, rcvs[i], booter_info.captbl_cap);
+			assert(asnds[j][i]);
+		}
+	}
+}
+
+static void
+tcap_perf_test_ndeleg(int ndelegs)
+{
+	int i, j;
+
+	/* TODO: cleanup with for-loop */
+	for (i = 1 ; i <= (ndelegs - 1) ; i ++) {
+		for (j = 1 ; j <= (ndelegs - 1) ; j ++) {
+			if (i == j) continue;
+			if ((cos_tcap_transfer(rcvs[i-1], tcs[j-1], TCAP_RES_INF, TCAP_PRIO_MAX))) assert(0);
+		}
+	}
+
+	/*
+	 * Prep for tcap-deleg ubench
+	 * Required because the current tcap being the ROOT tcap, has ndelegs = 1.
+	 */
+	if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
+}
+
+static void
+tcap_perf_test_transfer(void)
+{
+	int i;
+
+	total_tcap_cycles = 0;
+	for (i = 0 ; i < ITER ; i ++) {
+		start_tcap_cycles = 0;
+		end_tcap_cycles = 0;
+		rdtscll(start_tcap_cycles);
+		if (cos_tcap_transfer(rcvs[0], tcs[1], TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
+		rdtscll(end_tcap_cycles);
+		total_tcap_cycles += (end_tcap_cycles - start_tcap_cycles);
+	}
+	PRINTC("Average Tcap-transfer (Total: %lld / Iterations: %lld ): %lld\n",
+		total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
+}
+
+static void
+tcap_perf_test_delegate(int yield)
+{
+	int i;
+
+	total_tcap_cycles = 0;
+	for (i = 0 ; i < ITER ; i ++) {
+		start_tcap_cycles = 0;
+		end_tcap_cycles = 0;
+		rdtscll(start_tcap_cycles);
+		if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, yield ? TCAP_DELEG_YIELD : 0)) assert(0);
+		total_tcap_cycles += (end_tcap_cycles - start_tcap_cycles);
+	}
+
+	PRINTC("Average Tcap-delegate%s (Total: %lld / Iterations: %lld ): %lld\n", yield ? " w/ yield" : "",
+		total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
+}
+
+static void
+test_tcaps_perf(void)
+{
+	int ndelegs[] = { 3, 4, 8, 16, 64};
+	int i;
+
+	tcap_perf_test_prepare();
+	for ( i = 0; i < (int)(sizeof(ndelegs)/sizeof(ndelegs[0])); i ++) {
+		PRINTC("Tcaps-ubench for ndelegs = %d\n", ndelegs[i]);
+		tcap_perf_test_ndeleg(ndelegs[i]);
+		tcap_perf_test_transfer();
+		tcap_perf_test_delegate(1);
+		tcap_perf_test_delegate(0);
+	}
+}
+
 /* Executed in micro_booter environment */
 void
 test_run_mb(void)
@@ -598,19 +720,21 @@ test_run_mb(void)
 //	test_timer();
 //	test_budgets();
 
-	test_intr_latency();
+//	test_intr_latency();
 
 //	test_thds();
-	test_thds_perf(0);
-	test_thds_perf(1);
+//	test_thds_perf(0);
+//	test_thds_perf(1);
 
 //	test_mem();
 
 //	test_async_endpoints();
-	test_async_endpoints_perf();
+//	test_async_endpoints_perf();
 
 //	test_inv();
-	test_inv_perf();
+//	test_inv_perf();
+
+	test_tcaps_perf();
 
 //	test_captbl_expand();
 }
