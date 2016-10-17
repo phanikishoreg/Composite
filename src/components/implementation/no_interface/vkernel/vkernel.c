@@ -11,6 +11,7 @@
 #define BUG() do { debug_print("BUG @ "); *((int *)0) = 0; } while (0);
 #define SPIN() do { while (1) ; } while (0)
 
+#if 0
 struct vms_info {
 	struct cos_compinfo cinfo;
 	thdcap_t initthd, exitthd;
@@ -25,9 +26,14 @@ struct vkernel_info {
 	thdcap_t termthd;
 	asndcap_t vminitasnd[VM_COUNT];
 };
+#endif
 
 extern vaddr_t cos_upcall_entry;
+extern int test_running;
 extern void vm_init(void *);
+
+extern void vk_test_fn(void *);
+extern void vm_test_fn(void *);
 
 struct vms_info vmx_info[VM_COUNT];
 struct vkernel_info vk_info;
@@ -76,6 +82,7 @@ void
 cos_init(void)
 {
 	int id, cycs;
+	int ret;
 
 	printc("vkernel: START\n");
 	assert(VM_COUNT >= 2);
@@ -89,6 +96,19 @@ cos_init(void)
 
 	while (!(cycs = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE))) ;
 	printc("\t%d cycles per microsecond\n", cycs);
+	printc("vkernel: Creating test capabilites in vkernel\n");
+	
+	vk_info.testthd = cos_thd_alloc(vk_cinfo, vk_cinfo->comp_cap, vk_test_fn, NULL);
+	assert(vk_info.testthd);
+
+	vk_info.testtcap = cos_tcap_alloc(vk_cinfo, TCAP_PRIO_MAX);
+	assert(vk_info.testtcap);
+
+	vk_info.testarcv = cos_arcv_alloc(vk_cinfo, vk_info.testthd, vk_info.testtcap, vk_cinfo->comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+	assert(vk_info.testarcv);
+
+	ret = cos_tcap_transfer(vk_info.testarcv, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX);
+	assert(ret == 0);
 
 	for (id = 0 ; id < VM_COUNT ; id ++) {
 		struct cos_compinfo *vm_cinfo = &vmx_info[id].cinfo;
@@ -152,6 +172,9 @@ cos_init(void)
 		vm_info->initrcv = cos_arcv_alloc(vk_cinfo, vm_info->initthd, vm_info->inittcap, vk_cinfo->comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
 		assert(vm_info->initrcv);
 
+		ret = cos_tcap_transfer(vm_info->initrcv, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX);
+		assert(ret == 0);
+
 		ret = cos_cap_cpy_at(vm_cinfo, BOOT_CAPTBL_SELF_INITTCAP_BASE, vk_cinfo, vm_info->inittcap);
 		assert(ret == 0);
 		ret = cos_cap_cpy_at(vm_cinfo, BOOT_CAPTBL_SELF_INITRCV_BASE, vk_cinfo, vm_info->initrcv);
@@ -162,6 +185,40 @@ cos_init(void)
 		 */
 		vk_info.vminitasnd[id] = cos_asnd_alloc(vk_cinfo, vm_info->initrcv, vk_cinfo->captbl_cap);
 		assert(vk_info.vminitasnd[id]);
+
+		printc("\tCreating test capabilities in vm\n");
+		vm_info->testthd = cos_thd_alloc(vk_cinfo, vm_cinfo->comp_cap, vm_test_fn, (void *)id);
+		assert(vm_info->testthd);
+
+		vm_info->testtcap = cos_tcap_alloc(vk_cinfo, TCAP_PRIO_MAX);
+		assert(vm_info->testtcap);
+
+		vm_info->testarcv = cos_arcv_alloc(vk_cinfo, vm_info->testthd, vm_info->testtcap, vk_cinfo->comp_cap, vk_info.testarcv);
+		assert(vm_info->testarcv);
+
+		ret = cos_tcap_transfer(vm_info->testarcv, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX);
+		assert(ret == 0);
+
+		vm_info->testasnd = cos_asnd_alloc(vk_cinfo, vk_info.testarcv, vk_cinfo->captbl_cap);
+		assert(vm_info->testasnd);
+
+		vk_info.testasnd[id] = cos_asnd_alloc(vk_cinfo, vm_info->testarcv, vk_cinfo->captbl_cap);
+		assert(vk_info.testasnd[id]);
+
+		ret = cos_cap_cpy_at(vm_cinfo, VM_CAPTBL_TESTVKTHD_BASE, vk_cinfo, vk_info.testthd);
+		assert(ret == 0);
+
+		ret = cos_cap_cpy_at(vm_cinfo, VM_CAPTBL_TESTTHD_BASE, vk_cinfo, vm_info->testthd);
+		assert(ret == 0);
+
+		ret = cos_cap_cpy_at(vm_cinfo, VM_CAPTBL_TESTTCAP_BASE, vk_cinfo, vm_info->testtcap);
+		assert(ret == 0);
+
+		ret = cos_cap_cpy_at(vm_cinfo, VM_CAPTBL_TESTRCV_BASE, vk_cinfo, vm_info->testarcv);
+		assert(ret == 0);
+
+		ret = cos_cap_cpy_at(vm_cinfo, VM_CAPTBL_TESTASND_BASE, vk_cinfo, vm_info->testasnd);
+		assert(ret == 0);
 
 		/*
 		 * Create and copy booter comp virtual memory to each VM
@@ -185,10 +242,14 @@ cos_init(void)
 		printc("vkernel: VM%d Init END\n", id);
 	}
 
-	printc("Starting Scheduler\n");
 	printc("------------------[ VKernel & VMs init complete ]------------------\n");
 
-	scheduler();
+	printc("Inter-pgtbl tests (Vkernel <-> DOM0)\n");
+	while (test_running) cos_switch(vk_info.testthd, vk_info.testtcap, TCAP_PRIO_MAX, TCAP_TIME_NIL, 0);
+	printc("Done.\n");
+
+	//printc("Starting Scheduler\n");
+	//scheduler();
 
 	printc("vkernel: END\n");
 	cos_thd_switch(vk_info.termthd);

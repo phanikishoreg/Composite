@@ -178,6 +178,7 @@ typedef enum {
 } hwid_t;
 
 typedef unsigned long capid_t;
+#define TCAP_MAX_DELEGATIONS 64
 #define TCAP_PRIO_MAX (1ULL)
 #define TCAP_PRIO_MIN (~0ULL)
 #define TCAP_RES_GRAN_ORD  16
