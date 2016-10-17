@@ -3,7 +3,55 @@
 cycles_t cyc_per_usec;
 
 #define TIMEOUT_CYCS 10000
+
+#define INTR_LATENCY_CYCS 100
+#define INTR_LATENCY_ITER 10000
+static void
+spinner_cyc(void *d)
+{
+	cycles_t *p = (cycles_t *)d;
+
+	while (1) rdtscll(*p);
+}
+
+long long spin_cycs = 0LL;
+static void
+test_intr_latency(void)
+{
+	thdcap_t ts;
+	int i;
+	long long intr_cycs = 0LL;
+	long long total_cycles = 0LL;
+	cycles_t now;
+	tcap_time_t timer;
+
+	ts = cos_thd_alloc(&booter_info, booter_info.comp_cap, spinner_cyc, (void *)&spin_cycs);
+	assert(ts);
+
+	rdtscll(now);
+	timer = tcap_cyc2time(now + INTR_LATENCY_CYCS * cyc_per_usec);
+
+	for (i = 0 ; i < INTR_LATENCY_ITER ; i++) {
+		cycles_t cycles;
+		thdid_t tid;
+		int blocked;
+
+		rdtscll(now);
+		timer = tcap_cyc2time(now + INTR_LATENCY_CYCS * cyc_per_usec);
+		cos_switch(ts, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_PRIO_MAX, timer, BOOT_CAPTBL_SELF_INITRCV_BASE);
+
+		rdtscll(intr_cycs);
+
+		total_cycles += (intr_cycs - spin_cycs);
+		while (cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &blocked, &cycles) != 0) ;
+	}
+
+	PRINTC("Average Interrupt Latency (Total: %lld / Iterations: %lld ): %lld\n",
+		total_cycles, (long long) (INTR_LATENCY_ITER), (total_cycles / (long long)(INTR_LATENCY_ITER)));
+}
+
 int apic_timer_overhead_test = 0;
+
 static void
 thd_fn_perf(void *d)
 {
@@ -423,14 +471,6 @@ parent(void *d)
 }
 
 static void
-spinner_cyc(void *d)
-{
-	cycles_t *p = (cycles_t *)d;
-
-	while (1) rdtscll(*p);
-}
-
-static void
 test_budgets_single(void)
 {
 	int i;
@@ -621,6 +661,8 @@ test_run_mb(void)
 	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 //	test_timer();
 //	test_budgets();
+
+	test_intr_latency();
 
 //	test_thds();
 	test_thds_perf(0);
