@@ -67,6 +67,7 @@ cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		first = 0;
 		__alloc_libc_initilize();
 		constructors_execute();
+		cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 	}
 
 	switch (t) {

@@ -101,6 +101,16 @@ static void
 cos_print(char *s, int len)
 { call_cap(PRINT_CAP_TEMP, (int)s, len, 0, 0); }
 
+static inline int
+cos_hw_cycles_per_usec(capid_t hwc)
+{
+	static int hw_cycs_per_usec = 0;
+
+	while (!hw_cycs_per_usec) hw_cycs_per_usec = call_cap_op(hwc, CAPTBL_OP_HW_CYC_USEC, 0, 0, 0, 0);
+
+	return hw_cycs_per_usec;
+}
+
 /**
  * FIXME: Please remove this since it is no longer needed
  */

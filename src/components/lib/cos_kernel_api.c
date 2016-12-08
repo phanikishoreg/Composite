@@ -811,10 +811,6 @@ int
 cos_hw_detach(hwcap_t hwc, hwid_t hwid)
 { return call_cap_op(hwc, CAPTBL_OP_HW_DETACH, hwid, 0, 0, 0); }
 
-int
-cos_hw_cycles_per_usec(hwcap_t hwc)
-{ return call_cap_op(hwc, CAPTBL_OP_HW_CYC_USEC, 0, 0, 0, 0); }
-
 void *
 cos_hw_map(struct cos_compinfo *ci, hwcap_t hwc, paddr_t pa, unsigned int len)
 {
