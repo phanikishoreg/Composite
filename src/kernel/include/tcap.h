@@ -17,10 +17,6 @@
 #include "thd.h"
 #include "list.h"
 
-#ifndef TCAP_MAX_DELEGATIONS
-#define TCAP_MAX_DELEGATIONS 16
-#endif
-
 struct cap_tcap {
 	struct cap_header h;
 	struct tcap *tcap;
