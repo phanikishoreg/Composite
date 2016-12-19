@@ -107,5 +107,45 @@ int cos_hw_detach(hwcap_t hwc, hwid_t hwid);
 void *cos_hw_map(struct cos_compinfo *ci, hwcap_t hwc, paddr_t pa, unsigned int len);
 int cos_hw_cycles_per_usec(hwcap_t hwc);
 
+/* Capabilities for Async activation end point */
+struct cos_aep_info {
+	tcap_t sched_tc;
+	thdcap_t sched_thd;
+	arcvcap_t sched_rcv;
+};
+
+/* Default Component information */
+struct cos_defcompinfo {
+	struct cos_compinfo cinfo;
+	struct cos_aep_info schd_aep;
+};
+
+/*
+ * Def compinfo init
+ * This will be called by the current component to initialize it's cos_compinfo and cos_defcompinfo.
+ */
+void cos_defcominfo_init(struct cos_defcompinfo *defci, tcap_t sch_tcp, thdcap_t sch_thd, arcvcap_t sch_rcv, pgtblcap_t pgtbl_cap, captblcap_t captbl_cap, compcap_t comp_cap, vaddr_t heap_ptr, capid_t cap_frontier, struct cos_compinfo *ci_resources);
+/* Using global cos_compinfo and cos_defcompinfo of the current component */
+/*
+ * Def compinfo alloc (child component)
+ * This will be called by the component to create a new component, allocating new pgtbl, captbl and scheduling capabilities.
+ */
+int cos_defcominfo_alloc(struct cos_defcompinfo *defci, struct cos_aep_info *sch_aep, vaddr_t heap_ptr, capid_t cap_frontier);
+/*
+ * Aep create
+ * This will be called to create a new async activation endpoint which includes thd, tcap, rcv,
+ * using current component's sched ep as it's parent.
+ */
+int cos_aep_alloc(struct cos_aep_info *daep, compcap_t comp, cos_thd_fn_t fn, void *data);
+/*
+ * Aep create
+ * same as above, but using an existing tcap
+ */
+int cos_aep_alloc1(struct cos_aep_info *daep, tcap_t tc, compcap_t comp, cos_thd_fn_t fn, void *data);
+/*
+ * thd switch
+ * thread switch using tcap and arcv of sched aep from current component's global cos_defcompinfo
+ */
+int cos_switch1(thdcap_t c, tcap_prio_t p, tcap_time_t r, sched_tok_t stok);
 
 #endif /* COS_KERNEL_API_H */
