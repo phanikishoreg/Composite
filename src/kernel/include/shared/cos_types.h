@@ -175,7 +175,7 @@ typedef enum {
 	HW_ID30,
 	HW_ID31,
 	HW_ID32,
-	HW_LAPIC_TIMER = 255,  /* Local APIC TSC-DEADLINE mode - Timer interrupts */
+	HW_LAPIC_TIMER = 111,  /* Local APIC Timer interrupts */
 } hwid_t;
 
 typedef unsigned long capid_t;
@@ -307,6 +307,11 @@ enum {
 	THD_GET_DI,
 	/* thread id */
 	THD_GET_TID,
+};
+
+/* Tcap info */
+enum {
+	TCAP_GET_BUDGET,
 };
 
 enum {

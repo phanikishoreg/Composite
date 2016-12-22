@@ -4,12 +4,14 @@
 #include "vk_types.h"
 
 /* extern functions */
+extern void scheduler(void *);
 extern void vm_exit(void *);
 extern void vm_init(void *);
 extern void dom0_io_fn(void *);
 extern void vm_io_fn(void *);
 
 /* api */
+void vk_sched_init(struct vkernel_info *vkinfo);
 void vk_initcaps_init(struct vms_info *vminfo, struct vkernel_info *vkinfo);
 void vk_iocaps_init(struct vms_info *vminfo, struct vms_info *dom0info, struct vkernel_info *vkinfo);
 

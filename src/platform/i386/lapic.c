@@ -14,8 +14,8 @@
 #define LAPIC_INIT_COUNT_REG   0x380
 #define LAPIC_CURR_COUNT_REG   0x390
 
-#define LAPIC_PERIODIC_MODE    (0x01 << 17)
 #define LAPIC_ONESHOT_MODE     (0x00 << 17)
+#define LAPIC_PERIODIC_MODE    (0x01 << 17)
 #define LAPIC_TSCDEADLINE_MODE (0x02 << 17)
 #define LAPIC_INT_MASK         (1<<16)
 
@@ -26,6 +26,8 @@
 #define LAPIC_TIMER_MIN        (1<<12)
 #define LAPIC_COUNTER_MIN      (1<<3)
 
+#define LAPIC_RETRY_MAX        9
+
 extern int timer_process(struct pt_regs *regs);
 
 enum lapic_timer_type {
@@ -35,19 +37,21 @@ enum lapic_timer_type {
 };
 
 enum lapic_timer_div_by_config {
-	LAPIC_DIV_BY_2 = 0,
-	LAPIC_DIV_BY_4,
-	LAPIC_DIV_BY_8,
-	LAPIC_DIV_BY_16,
-	LAPIC_DIV_BY_32,
-	LAPIC_DIV_BY_64,
-	LAPIC_DIV_BY_128,
-	LAPIC_DIV_BY_1,
+	LAPIC_DIV_BY_2    = 0,
+	LAPIC_DIV_BY_4    = 1,
+	LAPIC_DIV_BY_8    = 2,
+	LAPIC_DIV_BY_16   = 3,
+	LAPIC_DIV_BY_32   = 8,
+	LAPIC_DIV_BY_64   = 9,
+	LAPIC_DIV_BY_128  = 10,
+	LAPIC_DIV_BY_1    = 11,
 };
 
 static volatile void *lapic = (void *)APIC_DEFAULT_PHYS;
 static unsigned int lapic_timer_mode = LAPIC_TSC_DEADLINE;
 static unsigned int lapic_is_disabled = 1;
+
+static cycles_t timer_write = 0, timer_fired = 0, timer_req = 0;
 
 static u32_t lapic_cpu_to_timer_ratio = 0;
 u32_t lapic_timer_calib_init = 0;
@@ -123,10 +127,15 @@ lapic_disable_timer(int timer_type)
 {
 	if (lapic_is_disabled) return;
 
+//	printk("TIMER-DISABLE\n");
 	if (timer_type == LAPIC_ONESHOT) {
 		lapic_write_reg(LAPIC_INIT_COUNT_REG, 0);
 	} else if (timer_type == LAPIC_TSC_DEADLINE) {
-		writemsr(IA32_MSR_TSC_DEADLINE, 0, 0);
+		u32_t low = 0, high = 0;
+		writemsr(IA32_MSR_TSC_DEADLINE, low, high);
+
+//		readmsr(IA32_MSR_TSC_DEADLINE, &low, &high);
+//		if (low || high) printk("not disabled???\n");
 	} else {
 		printk("Mode (%d) not supported\n", timer_type);
 		assert(0);
@@ -141,7 +150,14 @@ lapic_set_timer(int timer_type, cycles_t deadline)
 	u64_t now;
 
 	rdtscll(now);
-	if (deadline < now || (deadline - now) < LAPIC_TIMER_MIN) deadline = now + LAPIC_TIMER_MIN;
+	if (deadline < now || (deadline - now) < LAPIC_TIMER_MIN) {
+//		printk("+");
+		deadline = now + LAPIC_TIMER_MIN;
+	}
+//	if (deadline < LAPIC_TIMER_MIN) deadline = LAPIC_TIMER_MIN;
+//	deadline += now;
+//	timer_write = now;
+//	timer_req = deadline;
 
 	if (timer_type == LAPIC_ONESHOT) {
 		u32_t counter;
@@ -149,9 +165,25 @@ lapic_set_timer(int timer_type, cycles_t deadline)
 		counter = lapic_cycles_to_timer((u32_t)(deadline - now));
 		if (counter == 0) counter = LAPIC_COUNTER_MIN; 
 
+	//	printk("ONESHOT\n");
 		lapic_write_reg(LAPIC_INIT_COUNT_REG, counter);
+
+	//	printk("%lu:%lu:%lu\n", counter, lapic_read_reg(LAPIC_INIT_COUNT_REG), lapic_read_reg(LAPIC_CURR_COUNT_REG));
 	} else if (timer_type == LAPIC_TSC_DEADLINE) {
-		writemsr(IA32_MSR_TSC_DEADLINE, (u32_t) ((deadline << 32) >> 32), (u32_t)(deadline >> 32));
+//		u32_t high = 0, low = 0;
+		u32_t iters = 0;
+//			printk("TSC-DEADLINE = ");
+//		do {
+			writemsr(IA32_MSR_TSC_DEADLINE, (u32_t) ((deadline << 32) >> 32), (u32_t)(deadline >> 32));
+
+//			readmsr(IA32_MSR_TSC_DEADLINE, &low, &high);
+//			if (!low && !high)
+//				printk("%llu:%llu\n", deadline, ((u64_t)high << 32) | ((u64_t)low));
+//			iters ++;
+//			assert(iters < LAPIC_RETRY_MAX);
+//		} while (!low && !high);
+//	cos_mem_fence();
+//		printk("+++now:%llu, deadline:%llu, diff:%llu, %llu\n", now, deadline, deadline - now, ((u64_t)high << 32) | ((u64_t)low));
 	} else {
 		printk("Mode (%d) not supported\n", timer_type);
 		assert(0);
@@ -171,12 +203,18 @@ lapic_set_page(u32_t page)
 int
 lapic_timer_handler(struct pt_regs *regs)
 {
+//	static int counter = 0;
 	int preempt = 1; 
+	cycles_t now;
 
+//	rdtscll(timer_fired);
+//	rdtscll(now);
 	lapic_ack();
+//	printk("now:%llu...", now);
+//	printk("-----------------------\n%u=>Timer set@%llu, Timer request:%llu:%llu, Timer fired:%llu:%llu\n---------------------\n", counter, timer_write, timer_req, (timer_req - timer_write), timer_fired, (timer_fired - timer_write));
 
 	preempt = timer_process(regs);
-
+//	counter ++;
 	return preempt;
 }
 
@@ -213,24 +251,24 @@ lapic_timer_init(void)
 {
 	u32_t low, high;
 
-	if (!lapic_tscdeadline_supported()) {
-		printk("LAPIC: TSC-Deadline Mode not supported! Configuring Oneshot Mode!\n");
-
-		/* Set the mode and vector */
-		lapic_write_reg(LAPIC_TIMER_LVT_REG, HW_LAPIC_TIMER | LAPIC_ONESHOT_MODE);
-		lapic_timer_mode = LAPIC_ONESHOT;
-
-		/* Set the timer and mask it, so timer interrupt is not fired - for timer calibration through HPET */
-		lapic_write_reg(LAPIC_INIT_COUNT_REG, LAPIC_TIMER_CALIB_VAL);
-		lapic_write_reg(LAPIC_TIMER_LVT_REG, lapic_read_reg(LAPIC_TIMER_LVT_REG) | LAPIC_INT_MASK);
-		lapic_timer_calib_init = 1;
-	} else {
+//	if (!lapic_tscdeadline_supported()) {
+//		printk("LAPIC: TSC-Deadline Mode not supported! Configuring Oneshot Mode!\n");
+//
+//		/* Set the mode and vector */
+//		lapic_write_reg(LAPIC_TIMER_LVT_REG, HW_LAPIC_TIMER | LAPIC_ONESHOT_MODE);
+//		lapic_timer_mode = LAPIC_ONESHOT;
+//
+//		/* Set the timer and mask it, so timer interrupt is not fired - for timer calibration through HPET */
+//		lapic_write_reg(LAPIC_INIT_COUNT_REG, LAPIC_TIMER_CALIB_VAL);
+//		lapic_write_reg(LAPIC_TIMER_LVT_REG, lapic_read_reg(LAPIC_TIMER_LVT_REG) | LAPIC_INT_MASK);
+//		lapic_timer_calib_init = 1;
+//	} else {
 		printk("LAPIC: Configuring TSC-Deadline Mode!\n");
 	
 		/* Set the mode and vector */
 		lapic_write_reg(LAPIC_TIMER_LVT_REG, HW_LAPIC_TIMER | LAPIC_TSCDEADLINE_MODE);
 		lapic_timer_mode = LAPIC_TSC_DEADLINE;
-	}
+//	}
 
 	/* Set the divisor */
 	lapic_write_reg(LAPIC_DIV_CONF_REG, LAPIC_DIV_BY_1);

@@ -1,6 +1,32 @@
 #include "vk_api.h"
 
 void
+vk_sched_init(struct vkernel_info *vkinfo)
+{
+	struct cos_compinfo *vkcinfo = &vkinfo->cinfo;
+
+	assert(vkinfo && vkcinfo);	
+
+	vkinfo->vkschthd = cos_thd_alloc(vkcinfo, vkcinfo->comp_cap, scheduler, NULL);
+	assert(vkinfo->vkschthd);
+	printc("\tSched thread= cap:%x tid:%x\n", (unsigned int)vkinfo->vkschthd, (unsigned int)cos_introspect(vkcinfo, vkinfo->vkschthd, THD_GET_TID));
+
+	vkinfo->vkschtcap = cos_tcap_alloc(vkcinfo, TCAP_PRIO_MAX);
+	assert(vkinfo->vkschtcap);
+
+	vkinfo->vkschrcv = cos_arcv_alloc(vkcinfo, vkinfo->vkschthd, vkinfo->vkschtcap, vkcinfo->comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+	assert(vkinfo->vkschrcv);
+
+	vkinfo->vkschsnd = cos_asnd_alloc(vkcinfo, vkinfo->vkschrcv, vkcinfo->captbl_cap);
+	assert(vkinfo->vkschsnd);
+
+//	vkinfo->vkschthd = BOOT_CAPTBL_SELF_INITTHD_BASE;
+//	vkinfo->vkschtcap = BOOT_CAPTBL_SELF_INITTCAP_BASE;
+//	vkinfo->vkschrcv = BOOT_CAPTBL_SELF_INITRCV_BASE;
+//	vkinfo->vkschsnd = 0;
+}
+
+void
 vk_initcaps_init(struct vms_info *vminfo, struct vkernel_info *vkinfo)
 {
 	struct cos_compinfo *vmcinfo = &vminfo->cinfo;
@@ -31,7 +57,7 @@ vk_initcaps_init(struct vms_info *vminfo, struct vkernel_info *vkinfo)
 	vminfo->inittcap = cos_tcap_alloc(vkcinfo, TCAP_PRIO_MAX);
 	assert(vminfo->inittcap);
 
-	vminfo->initrcv = cos_arcv_alloc(vkcinfo, vminfo->initthd, vminfo->inittcap, vkcinfo->comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+	vminfo->initrcv = cos_arcv_alloc(vkcinfo, vminfo->initthd, vminfo->inittcap, vkcinfo->comp_cap, vkinfo->vkschrcv);
 	assert(vminfo->initrcv);
 
 	ret = cos_cap_cpy_at(vmcinfo, BOOT_CAPTBL_SELF_INITTCAP_BASE, vkcinfo, vminfo->inittcap);

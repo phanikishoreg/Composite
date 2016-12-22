@@ -37,6 +37,7 @@ hextol(const char *s)
 	return r;
 }
 
+u8_t serial_enable = 1;
 extern u8_t end; 		/* from the linker script */
 
 void
@@ -85,6 +86,11 @@ kern_memory_setup(struct multiboot *mb, u32_t mboot_magic)
 		glb_memlayout.bootc_entry = (void*)hextol((char *)(cmdline + addr_offset + ADDR_STR_LEN + 1));
 		printk(" @ virtual address %p, _start = %p.\n",
 		       glb_memlayout.bootc_vaddr, glb_memlayout.bootc_entry);
+
+		if (cmdline_len > CMDLINE_REQ_LEN) {
+			printk("Running on Hardware, not initializing Serial I/O\n");
+			serial_enable = 0;
+		}
 	}
 	glb_memlayout.kern_boot_heap = mem_boot_start();
 
@@ -136,9 +142,6 @@ kmain(struct multiboot *mboot, u32_t mboot_magic, u32_t esp)
 	gdt_init();
 	idt_init();
 
-#ifdef ENABLE_SERIAL
-	serial_init();
-#endif
 #ifdef ENABLE_CONSOLE
 	console_init();
 #endif
@@ -150,6 +153,10 @@ kmain(struct multiboot *mboot, u32_t mboot_magic, u32_t esp)
 		  MAX((unsigned long)mboot->mmap_addr, (unsigned long)(chal_va2pa(&end))));
 	kern_paging_map_init((void*)(max + PGD_SIZE));
 	kern_memory_setup(mboot, mboot_magic);
+
+#ifdef ENABLE_SERIAL
+	if (serial_enable) serial_init();
+#endif
 
 	chal_init();
 	cap_init();

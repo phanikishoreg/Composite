@@ -123,7 +123,8 @@ tcap_consume(struct tcap *t, tcap_res_t cycles)
 {
 	assert(t);
 	if (TCAP_RES_IS_INF(t->budget.cycles)) return 0;
-	if (cycles >= t->budget.cycles || cycles_same(cycles, t->budget.cycles)) {
+	//if (cycles >= t->budget.cycles || cycles_same(cycles, t->budget.cycles)) {
+	if (cycles >= t->budget.cycles) {
 		t->budget.cycles = 0;
 		tcap_active_rem(t); /* no longer active */
 
@@ -178,6 +179,7 @@ tcap_budgets_update(struct cos_cpu_local_info *cos_info, struct thread *t, struc
 	cycles_t cycles, expended;
 	struct tcap *curr = tcap_current(cos_info);
 
+//	cos_mem_fence();
 	cycles =  *now   = tsc();
 	expended         = cycles - cos_info->cycles;
 	cos_info->cycles = cycles;
@@ -214,6 +216,8 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_t
 		else                                                 timer = timeout_cyc;
 	}
 
+	//printk("%llu                %llu\n", timer, timer - now);
+	//chal_timer_set(timer - now);
 	chal_timer_set(timer);
 }
 
@@ -250,6 +254,17 @@ tcap_higher_prio(struct tcap *a, struct tcap *c)
 	ret = 1;
 fixup:
 	return ret;
+}
+
+static inline int
+tcap_introspect(struct tcap *t, unsigned long op, unsigned long *retval)
+{
+	switch(op) {
+	case TCAP_GET_BUDGET: *retval = t->budget.cycles; break;
+	default: return -EINVAL;
+	}
+
+	return 0;
 }
 
 #endif	/* TCAP_H */

@@ -11,8 +11,13 @@
 #define VM_SHM_SZ       (1<<20)	        /* Shared memory mapping for each vm = 4MB */
 #define VM_SHM_ALL_SZ   ((VM_COUNT>0)?(VM_COUNT*VM_SHM_SZ):VM_SHM_SZ)
 
-#define VM_BUDGET_FIXED 400000
+//#define VM_BUDGET_FIXED (1<<18)
+//#define VK_SCHED_BUDGET (VM_BUDGET_FIXED * 10)
+#define TICK_SLICE	(1000)
+#define VM_TICKS	1
+#define SCHED_TICKS	100
 #define VM_PRIO_FIXED   TCAP_PRIO_MAX
+#define VK_SCHED_THD_REQ
 
 enum vm_captbl_layout {
 	VM_CAPTBL_SELF_EXITTHD_BASE    = BOOT_CAPTBL_FREE,
@@ -71,6 +76,11 @@ struct vms_info {
 
 struct vkernel_info {
 	struct cos_compinfo cinfo, shm_cinfo;
+
+	thdcap_t vkschthd;
+	tcap_t vkschtcap;
+	arcvcap_t vkschrcv;
+	asndcap_t vkschsnd;
 
 	thdcap_t termthd;
 	asndcap_t vminitasnd[VM_COUNT];

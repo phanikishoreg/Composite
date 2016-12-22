@@ -657,23 +657,23 @@ test_tcaps_perf(void)
 void
 test_run_mb(void)
 {
-	test_timer();
-	test_budgets();
+//	test_timer();
+//	test_budgets();
 
-	test_thds();
+//	test_thds();
 	test_thds_perf();
 
-	test_mem();
+//	test_mem();
 
-	test_async_endpoints();
+//	test_async_endpoints();
 	test_async_endpoints_perf();
 
-	test_inv();
+//	test_inv();
 	test_inv_perf();
 
-	test_captbl_expand();
+//	test_captbl_expand();
 
-	test_tcaps_perf();
+//	test_tcaps_perf();
 }
 
 /*
@@ -687,13 +687,13 @@ test_run_mb(void)
 void
 test_run_vk(void)
 {
-	test_thds();
+//	test_thds();
 	test_thds_perf();
 
-	test_mem();
-
-	test_inv();
-	test_inv_perf();
-
-	test_captbl_expand();
+//	test_mem();
+//
+//	test_inv();
+//	test_inv_perf();
+//
+//	test_captbl_expand();
 }

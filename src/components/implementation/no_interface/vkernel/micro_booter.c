@@ -42,6 +42,25 @@ int num = 1, den = 0;
 int vmid;
 
 void
+loop_cycs(cycles_t cycs, unsigned int iters)
+{
+	unsigned int i = 0;
+	while (i < iters) {
+		cycles_t curr, deadline;
+
+		rdtscll(curr);
+		deadline = curr + cycs;
+
+		while (curr < deadline) rdtscll(curr);
+
+		i ++;
+//		PRINTC(".");
+	}
+
+	return;
+}
+
+void
 vm_init(void *d)
 {
 	vmid = (int)d;
@@ -50,7 +69,8 @@ vm_init(void *d)
 			  (vaddr_t)cos_get_heap_ptr(), vmid == 0 ? DOM0_CAPTBL_FREE : VM_CAPTBL_FREE, &booter_info);
 
 	PRINTC("Micro Booter started.\n");
-	test_run_vk();
+	//test_run_vk();
+	loop_cycs((cycles_t)(1<<31), (unsigned int)(1<<31));
 	PRINTC("Micro Booter done.\n");
 
 	EXIT();

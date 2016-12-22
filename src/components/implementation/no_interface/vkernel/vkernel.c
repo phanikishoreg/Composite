@@ -22,6 +22,9 @@ struct vkernel_info vk_info;
 unsigned int ready_vms = VM_COUNT;
 struct cos_compinfo *vk_cinfo = (struct cos_compinfo *)&vk_info.cinfo;
 
+unsigned int cycs_per_usec = 0;
+tcap_res_t sched_budget = 0, vm_budget = 0;
+
 void
 vk_terminate(void *d)
 { SPIN(); }
@@ -33,11 +36,60 @@ vm_exit(void *d)
 	ready_vms --;
 	vmx_info[(int)d].state = VM_EXITED;	
 
-	cos_switch(BOOT_CAPTBL_SELF_INITTHD_BASE, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, TCAP_TIME_NIL, 0, cos_sched_sync());	
+	while (1) cos_switch(vk_info.vkschthd, vk_info.vkschtcap, 0, TCAP_TIME_NIL, 0, cos_sched_sync());	
+}
+
+cycles_t
+delay(void)
+{
+	unsigned int i = ~0;
+	cycles_t now, delay;
+
+	rdtscll(now);
+	while (i > 1) i --;
+	rdtscll(delay);
+
+	return (delay - now);
 }
 
 void
-scheduler(void) 
+chronos(void *d)
+{
+	static unsigned int i;
+	thdid_t             tid;
+	int                 blocked;
+	cycles_t            cycles;
+	int                 index;
+
+	cycles_t            prev = 0, now = 0, diff = 0;
+	cycles_t x = 0;
+
+	rdtscll(now);
+	prev = now;
+	while (ready_vms) {
+
+		rdtscll(now);
+		diff = now - prev;
+	//	x = delay();
+		x ++;
+		if (x == 100000) break;
+		//rdtscll(prev);
+		//prev = now;
+		//printc("Chronos activated - now:%llu budget:%lu active_diff:%llu, 0:%lu\n", now, sched_budget, diff, (tcap_res_t)cos_introspect(&vk_info.cinfo, vmx_info[0].inittcap, TCAP_GET_BUDGET));
+		printc("Chronos activated - now:%llu budget:%lu active_diff:%llu, vk-sched:%lu\n", now, sched_budget, diff, (tcap_res_t)cos_introspect(&vk_info.cinfo, vk_info.vkschtcap, TCAP_GET_BUDGET));
+		rdtscll(prev);
+		if (cos_tcap_delegate(vk_info.vkschsnd, BOOT_CAPTBL_SELF_INITTCAP_BASE,
+		//if (cos_tcap_delegate(vk_info.vminitasnd[0], BOOT_CAPTBL_SELF_INITTCAP_BASE,
+				      sched_budget, VM_PRIO_FIXED, TCAP_DELEG_YIELD)) assert(0);
+
+		//if (cos_tcap_transfer(vmx_info[0].initrcv, BOOT_CAPTBL_SELF_INITTCAP_BASE, sched_budget, VM_PRIO_FIXED)) assert(0);
+		//cos_switch(vmx_info[0].initthd, vmx_info[0].inittcap, VM_PRIO_FIXED, TCAP_TIME_NIL, BOOT_CAPTBL_SELF_INITRCV_BASE, cos_sched_sync());
+		//while (cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &blocked, &cycles)) ;
+	}
+}
+
+void
+scheduler(void *x)
 {
 	static unsigned int i;
 	thdid_t             tid;
@@ -47,23 +99,35 @@ scheduler(void)
 
 	while (ready_vms) {
 		index = i++ % VM_COUNT;
+		//printc("Scheduling %d\n", index);
 		
 		if (vmx_info[index].state == VM_RUNNING) {
+			tcap_res_t cur_vm_budget;
 			assert(vk_info.vminitasnd[index]);
 
-			if (cos_tcap_delegate(vk_info.vminitasnd[index], BOOT_CAPTBL_SELF_INITTCAP_BASE,
-					      VM_BUDGET_FIXED, VM_PRIO_FIXED, TCAP_DELEG_YIELD)) assert(0);
+			//cur_vm_budget = (tcap_res_t)cos_introspect(&vk_info.cinfo, vmx_info[index].inittcap, TCAP_GET_BUDGET);
+			//tcap_res_t cur_budget = (tcap_res_t)cos_introspect(&vk_info.cinfo, vk_info.vkschtcap, TCAP_GET_BUDGET);
+			//printc("Sched: %d vm:%lu:%lu sched:%lu", index, vm_budget, cur_vm_budget, cur_budget);
+			//if (cur_vm_budget) {
+			//	printc("---%d\n", index);
+			//	if (cos_asnd(vk_info.vminitasnd[index], 1)) assert(0);
+			//} else {
+//			printc("+++%d\n", index);
+				if (cos_tcap_delegate(vk_info.vminitasnd[index], vk_info.vkschtcap,
+						      0, VM_PRIO_FIXED, TCAP_DELEG_YIELD)) assert(0);
+			//}
 		}
 
-		while (cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &blocked, &cycles)) ;
+		//while (cos_sched_rcv(vk_info.vkschrcv, &tid, &blocked, &cycles)) ;
 	}
-}
 
+	SPIN();
+}
 
 void
 cos_init(void)
 {
-	int id, cycs;
+	int id;
 
 	printc("vkernel: START\n");
 	assert(VM_COUNT >= 2);
@@ -82,8 +146,13 @@ cos_init(void)
 	vk_info.termthd = cos_thd_alloc(vk_cinfo, vk_cinfo->comp_cap, vk_terminate, NULL);
 	assert(vk_info.termthd);
 
-	cycs = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
-	printc("\t%d cycles per microsecond\n", cycs);
+	cycs_per_usec = (unsigned int) cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
+	printc("\t%u cycles per microsecond\n", cycs_per_usec);
+	sched_budget = cycs_per_usec * TICK_SLICE * SCHED_TICKS;
+	vm_budget    = cycs_per_usec * TICK_SLICE * VM_TICKS;
+//	sched_budget = vm_budget;
+
+	vk_sched_init(&vk_info);
 
 	for (id = 0 ; id < VM_COUNT ; id ++) {
 		struct cos_compinfo *vm_cinfo = &vmx_info[id].cinfo;
@@ -170,7 +239,7 @@ cos_init(void)
 	printc("Starting Scheduler\n");
 	printc("------------------[ VKernel & VMs init complete ]------------------\n");
 
-	scheduler();
+	chronos(NULL);
 
 	printc("vkernel: END\n");
 	cos_thd_switch(vk_info.termthd);
