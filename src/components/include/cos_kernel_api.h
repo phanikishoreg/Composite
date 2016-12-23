@@ -107,45 +107,59 @@ int cos_hw_detach(hwcap_t hwc, hwid_t hwid);
 void *cos_hw_map(struct cos_compinfo *ci, hwcap_t hwc, paddr_t pa, unsigned int len);
 int cos_hw_cycles_per_usec(hwcap_t hwc);
 
+/* Default API */
 /* Capabilities for Async activation end point */
 struct cos_aep_info {
-	tcap_t sched_tc;
-	thdcap_t sched_thd;
-	arcvcap_t sched_rcv;
+	tcap_t    tc;
+	thdcap_t  thd;
+	arcvcap_t rcv;
 };
 
 /* Default Component information */
-struct cos_defcompinfo {
-	struct cos_compinfo cinfo;
-	struct cos_aep_info schd_aep;
+struct cos_defci {
+	struct cos_compinfo ci;
+	struct cos_aep_info sched_aep;
 };
 
+/* current component's default component information */
+extern struct cos_defci curr_defci;
+
 /*
- * Def compinfo init
- * This will be called by the current component to initialize it's cos_compinfo and cos_defcompinfo.
+ * cos_defci_init: initialize the current component's global cos_defci struct using the standard boot capabilities layout.
  */
-void cos_defcominfo_init(struct cos_defcompinfo *defci, tcap_t sch_tcp, thdcap_t sch_thd, arcvcap_t sch_rcv, pgtblcap_t pgtbl_cap, captblcap_t captbl_cap, compcap_t comp_cap, vaddr_t heap_ptr, capid_t cap_frontier, struct cos_compinfo *ci_resources);
-/* Using global cos_compinfo and cos_defcompinfo of the current component */
+void cos_defci_init(void);
 /*
- * Def compinfo alloc (child component)
- * This will be called by the component to create a new component, allocating new pgtbl, captbl and scheduling capabilities.
+ * cos_defci_init_ext: initialize the current component's global cos_defci struct using the parameters passed.
  */
-int cos_defcominfo_alloc(struct cos_defcompinfo *defci, struct cos_aep_info *sch_aep, vaddr_t heap_ptr, capid_t cap_frontier);
+void cos_defci_init_ext(tcap_t sched_tc, thdcap_t sched_thd, arcvcap_t sched_rcv, pgtblcap_t pgtbl_cap, captblcap_t captbl_cap, compcap_t comp_cap, vaddr_t heap_ptr, capid_t cap_frontier);
 /*
- * Aep create
- * This will be called to create a new async activation endpoint which includes thd, tcap, rcv,
- * using current component's sched ep as it's parent.
+ * cos_compinfo_get: returns the cos_compinfo pointer that points to the cos_compinfo struct inside cos_defci.
  */
-int cos_aep_alloc(struct cos_aep_info *daep, compcap_t comp, cos_thd_fn_t fn, void *data);
+struct cos_compinfo *cos_compinfo_get(void);
+
 /*
- * Aep create
- * same as above, but using an existing tcap
+ * cos_defci_child_alloc: this is called to create a child component with new initial capabilities like pgtbl, captbl, compcap, etc.
+ *                        if is_sched is set, scheduling end_point is created for the new component, 
+ *                        else current component's scheduler is used as scheduler for the child component.
  */
-int cos_aep_alloc1(struct cos_aep_info *daep, tcap_t tc, compcap_t comp, cos_thd_fn_t fn, void *data);
+int cos_defci_child_alloc(struct cos_defci *child_defci, vaddr_t entry, vaddr_t heap_ptr, capid_t cap_frontier, int is_sched);
+
 /*
- * thd switch
- * thread switch using tcap and arcv of sched aep from current component's global cos_defcompinfo
+ * thread function that takes it's async rcv end-point as an argument along with user-passed void *
  */
-int cos_switch1(thdcap_t c, tcap_prio_t p, tcap_time_t r, sched_tok_t stok);
+typedef void (*cos_defthd_fn_t)(arcvcap_t, void *);
+/*
+ * cos_aep_alloc: creates a new async activation end-point which includes thread, tcap and rcv capabilities. 
+ */
+int cos_aep_alloc(struct cos_aep_info *aep, cos_defthd_fn_t fn, void *data);
+/*
+ * cos_aep_alloc: creates a new async activation end-point, using an existing tcap. 
+ */
+int cos_aep_tcap_alloc(struct cos_aep_info *aep, tcap_t tc, cos_defthd_fn_t fn, void *data);
+
+/*
+ * cos_defswitch: thread switch api using the default scheduling tcap and rcv.
+ */
+int cos_defswitch(thdcap_t c, tcap_prio_t p, tcap_time_t r, sched_tok_t stok);
 
 #endif /* COS_KERNEL_API_H */
