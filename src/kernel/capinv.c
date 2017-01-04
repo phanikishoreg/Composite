@@ -549,11 +549,23 @@ notify_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap
  */
 static struct thread *
 asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
-	     struct tcap *tcap, struct tcap **tcap_next, int yield)
+	     struct tcap *tcap, struct tcap **tcap_next, int yield, struct cos_cpu_local_info *cos_info)
 {
-	thd_rcvcap_pending_inc(rcv_thd);
+	struct thread *next;
 
-	return notify_process(rcv_thd, thd, rcv_tcap, tcap, tcap_next, yield);
+	thd_rcvcap_pending_inc(rcv_thd);
+	next = notify_process(rcv_thd, thd, rcv_tcap, tcap, tcap_next, yield);
+
+	if (next == rcv_thd) {
+		/* preempting snd thread */
+		thd->rcvcap.preempt_cntr = cos_info->preempt_epoch;
+		list_add(&cos_info->preempt_list, &thd->preempt_node);
+	} else {
+		/* wake-up rcv thread. */
+		tcap_wakeup(rcv_tcap, tcap_sched_info(rcv_tcap)->prio);
+	}
+
+	return next;
 }
 
 static int
@@ -657,6 +669,12 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 		if (!tcap_rcvcap_thd(tcap)) return -EINVAL;
 	}
 
+	if (cos_info->preempt_epoch == next->rcvcap.preempt_cntr) {
+		cos_info->preempt_epoch ++;
+		/* TODO: to remove or not! */
+		list_rem(&next->preempt_node);
+	}	
+
 	ret = cap_switch(regs, thd, next, tcap, timeout, ci, cos_info);
 	if (tc && tcap_current(cos_info) == tcap) tcap_setprio(tcap, prio);
 
@@ -697,7 +715,7 @@ cap_asnd_op(struct cap_asnd *asnd, struct thread *thd, struct pt_regs *regs,
 	rcv_tcap = rcv_thd->rcvcap.rcvcap_tcap;
 	assert(rcv_tcap && tcap);
 
-	next = asnd_process(rcv_thd, thd, rcv_tcap, tcap, &tcap_next, yield);
+	next = asnd_process(rcv_thd, thd, rcv_tcap, tcap, &tcap_next, yield, cos_info);
 
 	return cap_switch(regs, thd, next, tcap_next, TCAP_TIME_NIL, ci, cos_info);
 }
@@ -737,7 +755,7 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 	rcv_tcap = rcv_thd->rcvcap.rcvcap_tcap;
 	assert(rcv_tcap && tcap);
 
-	next = asnd_process(rcv_thd, thd, rcv_tcap, tcap, &tcap_next, 0);
+	next = asnd_process(rcv_thd, thd, rcv_tcap, tcap, &tcap_next, 0, cos_info);
 	if (next == thd) return 1;
 	thd->state |= THD_STATE_PREEMPTED;
 
@@ -793,7 +811,7 @@ static int
 cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	    struct comp_info *ci, struct cos_cpu_local_info *cos_info)
 {
-	struct thread *next;
+	struct thread *next, *pr_thd;
 	struct tcap   *tc_next = tcap_current(cos_info);
 
 	if (unlikely(arcv->thd != thd || arcv->cpuid != get_cpuid())) return -EINVAL;
@@ -811,6 +829,11 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	}
 
 	next = notify_parent(thd);
+	pr_thd = list_first(&cos_info->preempt_list);
+	if (unlikely(pr_thd && pr_thd->rcvcap.preempt_cntr == cos_info->preempt_epoch)) {
+		list_rem(&pr_thd->preempt_node);
+		next = pr_thd;
+	}
 
 	/* FIXME:  for now, lets just ignore this path...need to plumb tcaps into it */
 	thd->interrupted_thread = NULL;
@@ -1502,7 +1525,7 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			ret = tcap_delegate(tcapdst, tcapsrc->tcap, res, prio);
 			if (unlikely(ret)) cos_throw(err, -EINVAL);
 
-			n = asnd_process(rthd, thd, tcapdst, tcap_current(cos_info), &tcap_next, yield);
+			n = asnd_process(rthd, thd, tcapdst, tcap_current(cos_info), &tcap_next, yield, cos_info);
 			if (n != thd) {
 				ret = cap_switch(regs, thd, n, tcap_next, TCAP_TIME_NIL, ci, cos_info);
 				if (unlikely(ret < 0)) cos_throw(err, ret);
@@ -1529,6 +1552,41 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			ret = tcap_merge(tcapdst->tcap, tcaprm->tcap);
 			if (unlikely(ret)) cos_throw(err, -ENOENT);
 
+			break;
+		}
+		case CAPTBL_OP_TCAP_WAKEUP:
+		{
+			u32_t prio_higher    = __userregs_get2(regs);
+			u32_t prio_lower     = __userregs_get3(regs);
+			tcap_prio_t prio     = (tcap_prio_t)prio_higher << 32 | (tcap_prio_t)prio_lower;
+			struct cap_tcap *tcw = (struct cap_tcap *)ch;
+
+			/* ROUGH WORK!!
+			 * Steps:
+			 * 1. curr == W.tc? 
+			 * 2. get curr prio on W.tc. 
+			 * 3. set new prio on W.tc.
+			 * 4. tcap_higher_prio W.tc vs preempt_thds->head->rcvcap->tcap P.tc.
+			 * 5. if W.tc > P.tc, incremeent preempt_epoch. DONE. Return. 
+			 * 6. else, do nothing.
+
+
+			  Extension (in RCV_OP):
+			1. if preempt_epoch == preempt_thds->head->rcvcap->epoch?  
+			2. switch to preempted thread. (try)
+			3. else switch to sched thread. (try)
+
+			  Extension (in SWITCH):
+			1. if a entry in the preempt_thds is switched to and is not the head, 
+			2. and thd_epoch == preempt_epoch, increment epoch. (invalidating the entire preemption list).
+
+			  Extension (in THD_DEACT):
+			1. if an entry in the preempt_thds is deleted and thd_epoch == preempt_epoch,
+			2. increment epoch. 
+
+			 * TODO: SINGLY-LINKED LISTS (for now, using doubly-linked lists as used in tcaps, etc).
+			 *       SIZE OF cos_cpu_local_info on KERNEL STACK! Update that!
+			 */
 			break;
 		}
 		default: goto err;

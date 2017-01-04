@@ -37,6 +37,8 @@ struct rcvcap_info {
 	sched_tok_t sched_count;
 	struct tcap   *rcvcap_tcap;      /* This rcvcap's tcap */
 	struct thread *rcvcap_thd_notif; /* The parent rcvcap thread for notifications */
+
+	unsigned long preempt_cntr;
 };
 
 typedef enum {
@@ -72,6 +74,8 @@ struct thread {
 	struct rcvcap_info rcvcap;
 	struct list        event_head; /* all events for *this* end-point */
 	struct list_node   event_list; /* the list of events for another end-point */
+
+	struct list_node preempt_node;
 } CACHE_ALIGNED;
 
 /*
@@ -160,6 +164,8 @@ thd_rcvcap_init(struct thread *t)
 	rc->isbound = rc->pending = rc->refcnt = 0;
 	rc->sched_count = 0;
 	rc->rcvcap_thd_notif = NULL;
+
+	rc->preempt_cntr = 0;
 }
 
 static inline void
@@ -248,6 +254,7 @@ thd_activate(struct captbl *t, capid_t cap, capid_t capin, struct thread *thd, c
 	thd_rcvcap_init(thd);
 	list_head_init(&thd->event_head);
 	list_init(&thd->event_list, thd);
+	list_init(&thd->preempt_node, thd);
 
 	thd_upcall_setup(thd, compc->entry_addr, COS_UPCALL_THD_CREATE, init_data, 0, 0);
 

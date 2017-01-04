@@ -54,6 +54,9 @@ struct cos_cpu_local_info {
 	 * Linux), we store 0xDEADBEEF to detect overflow.
 	 */
 	unsigned long overflow_check;
+
+	unsigned long preempt_epoch;
+	struct list   preempt_list;
 };
 
 static inline struct cos_cpu_local_info *

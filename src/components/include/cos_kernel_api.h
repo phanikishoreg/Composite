@@ -99,6 +99,7 @@ tcap_t cos_tcap_alloc(struct cos_compinfo *ci);
 int cos_tcap_transfer(tcap_t src, arcvcap_t dst, tcap_res_t res, tcap_prio_t prio);
 int cos_tcap_delegate(asndcap_t dst, tcap_t src, tcap_res_t res, tcap_prio_t prio, tcap_deleg_flags_t flags);
 int cos_tcap_merge(tcap_t dst, tcap_t rm);
+int cos_tcap_wakeup(tcap_t tc, tcap_prio_t prio);
 
 /* Hardware (interrupts) operations */
 hwcap_t cos_hw_alloc(struct cos_compinfo *ci, u32_t bitmap);

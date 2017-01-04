@@ -76,6 +76,7 @@ int tcap_activate(struct captbl *ct, capid_t cap, capid_t capin, struct tcap *tc
 int tcap_delegate(struct tcap *tcapdst, struct tcap *tcapsrc, tcap_res_t cycles, tcap_prio_t prio);
 int tcap_merge(struct tcap *dst, struct tcap *rm);
 void tcap_promote(struct tcap *t, struct thread *thd);
+void tcap_wakeup(struct tcap *t, tcap_prio_t prio);
 
 struct thread *tcap_tick_handler(void);
 void tcap_timer_choose(int c);
@@ -236,6 +237,7 @@ tcap_higher_prio(struct tcap *a, struct tcap *c)
 	int i, j;
 	int ret = 0;
 
+	if (a == c) return 1;
 	if (tcap_expended(a)) return 0;
 
 	for (i = 0, j = 0 ; i < a->ndelegs && j < c->ndelegs ; ) {

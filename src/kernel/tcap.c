@@ -128,6 +128,40 @@ tcap_activate(struct captbl *ct, capid_t cap, capid_t capin, struct tcap *tcap_n
 }
 
 void
+tcap_wakeup(struct tcap *wr_tc, tcap_prio_t prio)
+{
+	int ret;
+	struct tcap *pr_tc;
+	tcap_prio_t tmp_prio;
+	struct thread *pr_thd;
+	struct cos_cpu_local_info *cli = cos_cpu_local_info();
+
+	assert(wr_tc);
+	pr_tc = list_first(&cli->preempt_list);
+
+	/* no entries in the list */
+	if (!pr_tc) return;
+	pr_thd = tcap_rcvcap_thd(pr_tc);
+	assert(pr_thd);
+
+	/* if preemption list is flushed */
+	if (pr_thd->rcvcap.preempt_cntr < cli->preempt_epoch) return;
+	if (pr_tc == wr_tc) {
+		if (tcap_sched_info(pr_tc)->prio < prio) cli->preempt_epoch ++;
+		return;
+	}
+
+	/* compare W.tc vs P.tc */
+	tmp_prio = tcap_sched_info(wr_tc)->prio;
+	tcap_setprio(wr_tc, prio);
+	ret = tcap_higher_prio(pr_tc, wr_tc);
+	tcap_setprio(wr_tc, tmp_prio);	
+	if (!ret) cli->preempt_epoch ++;
+
+	return;
+}
+
+void
 tcap_promote(struct tcap *t, struct thread *thd)
 {
 	if (tcap_isactive(t)) return;

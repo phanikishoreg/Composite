@@ -802,6 +802,15 @@ cos_tcap_merge(tcap_t dst, tcap_t rm)
 { return call_cap_op(dst, CAPTBL_OP_TCAP_MERGE, rm, 0, 0, 0); }
 
 int
+cos_tcap_wakeup(tcap_t tc, tcap_prio_t prio)
+{
+	int prio_higher = (u32_t)(prio >> 32);
+	int prio_lower  = (u32_t)((prio << 32) >> 32);
+
+	return call_cap_op(tc, CAPTBL_OP_TCAP_WAKEUP, prio_higher, prio_lower, 0, 0);
+}
+
+int
 cos_hw_attach(hwcap_t hwc, hwid_t hwid, arcvcap_t arcv)
 { return call_cap_op(hwc, CAPTBL_OP_HW_ATTACH, hwid, arcv, 0, 0); }
 

@@ -99,6 +99,8 @@ kern_boot_thd(struct captbl *ct, void *thd_mem, void *tcap_mem)
 			   thd_mem, BOOT_CAPTBL_SELF_COMP, 0);
 	assert(!ret);
 
+	cos_info->preempt_epoch = 1;
+	list_head_init(&(cos_info->preempt_list));
 	tcap_active_init(cos_info);
 	ret = tcap_activate(ct, BOOT_CAPTBL_SELF_CT, BOOT_CAPTBL_SELF_INITTCAP_BASE, tcap_mem);
 	assert(!ret);
