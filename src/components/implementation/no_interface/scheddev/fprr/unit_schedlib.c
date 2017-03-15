@@ -77,7 +77,7 @@ cos_init(void)
 	sl_init();
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		threads[i] = sl_thd_alloc(test_thd_fn, (void *)(i + 1));
+		threads[i] = sl_thd_alloc(test_thd_fn, (void *)(i+1));
 		assert(threads[i]);
 		sl_thd_param_set(threads[i], sp.v);
 	}
