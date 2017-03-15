@@ -32,7 +32,7 @@ sl_mod_schedule(void)
 
 	assert(heap_size(hs));
 	t = heap_peek(hs);
-	debug("peek idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+	debug("schedule= peek idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 
 	return t;
 }
@@ -40,14 +40,22 @@ sl_mod_schedule(void)
 void
 sl_mod_block(struct sl_thd_policy *t)
 {
+	assert(t->prio_idx >= 0);
+
+	heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
-	heap_adjust(hs, t->prio_idx);
-	debug("adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+	t->prio_idx  = -1;
+	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 }
 
 void
 sl_mod_wakeup(struct sl_thd_policy *t)
-{ }
+{
+	assert(t->prio_idx < 0);
+
+	heap_add(hs, t);
+	debug("wakeup= add idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+}
 
 void
 sl_mod_yield(struct sl_thd_policy *t, struct sl_thd_policy *yield_to)
@@ -59,10 +67,11 @@ sl_mod_thd_create(struct sl_thd_policy *t)
 	t->period      = 0;
 	t->period_usec = 0;
 	t->priority    = t->deadline = ~(cycles_t)0;
+	t->prio_idx    = -1;
 	
 	assert((heap_size(hs)+1) < SL_EDF_MAX_THDS);
 	heap_add(hs, t);
-	debug("add idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+	debug("create= add idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 }
 
 void
@@ -79,7 +88,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 	/* first deadline. assuming arrival time = 0 */
 	t->deadline = t->priority = t->period;
 	heap_adjust(hs, t->prio_idx);
-	debug("adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+	debug("param_set= adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 }
 
 static int
