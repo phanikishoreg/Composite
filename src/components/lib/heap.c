@@ -13,16 +13,18 @@
 #define printd printc
 #endif
 
+#include <string.h>
 #include <heap.h>
 
-//#define HEAP_TRACE_DEBUG
+#undef HEAP_TRACE_DEBUG
 #ifdef HEAP_TRACE_DEBUG
 #define debug(format, ...) printd(format, ## __VA_ARGS__)
 #else 
 #define debug(format, ...)
 #endif
 
-static inline void swap_entries(void *arr[], int a, int b, update_fn_t u)
+static inline void
+swap_entries(void *arr[], int a, int b, update_fn_t u)
 {
 	void *t;
 
@@ -39,9 +41,11 @@ static inline void swap_entries(void *arr[], int a, int b, update_fn_t u)
  * c: current index
  * e: end index
  */
-static inline int swap_down(struct heap *h, int c)
+static inline int
+swap_down(struct heap *h, int c)
 {
 	int l; 			/* last entry */
+
 	assert(c != 0);
 	assert(c <= h->e);
 
@@ -60,6 +64,7 @@ static inline int swap_down(struct heap *h, int c)
 		} else {
 			n = right;
 		}
+
 		assert(n < h->e);
 		if (h->c(h->data[c], h->data[n])) break; /* done? */
 
@@ -70,7 +75,8 @@ static inline int swap_down(struct heap *h, int c)
 	return c;
 }
 
-static inline int swap_up(struct heap *h, int c)
+static inline int
+swap_up(struct heap *h, int c)
 {
 	assert(c <= h->e);
 	assert(c > 0);
@@ -91,7 +97,8 @@ static inline int swap_up(struct heap *h, int c)
 }
 
 /* return c's final index */
-static inline int heapify(struct heap *h, int c)
+static inline int
+heapify(struct heap *h, int c)
 {
 	c = swap_up(h, c);
 	return swap_down(h, c);
@@ -105,7 +112,8 @@ struct hentry {
 
 //#define HEAP_VERIFY
 #ifdef HEAP_VERIFY
-static inline int __heap_verify(struct heap *h, int c)
+static inline int
+__heap_verify(struct heap *h, int c)
 {
 	int left, right;
 
@@ -132,46 +140,55 @@ static inline int __heap_verify(struct heap *h, int c)
 	return 0;
 }
 
-static int heap_verify(struct heap *h)
-{
-	return __heap_verify(h, 1);
-}
+static int
+heap_verify(struct heap *h)
+{ return __heap_verify(h, 1); }
 #else
 #define heap_verify(h) 0
 #endif
 
 /* public functions */
-
-struct heap *heap_alloc(int max_sz, cmp_fn_t c, update_fn_t u)
+void
+heap_init(struct heap *h, int max_sz, cmp_fn_t c, update_fn_t u)
 {
-	struct heap *h;
+	assert(h);
 
-	h = malloc(sizeof(struct heap) + (max_sz * sizeof(void*)) + 1);
-	if (NULL == h) return NULL;
-
+	/*memset((void *)h, 0, sizeof(struct heap) + (max_sz * sizeof(void*)) + 1);*/
 	h->max_sz = max_sz+1;
 	h->e = 1;
 	h->c = c;
 	h->u = u;
 	h->data = (void *)&h[1];
 	assert(!heap_verify(h));
+}
 
+struct heap *
+heap_alloc(int max_sz, cmp_fn_t c, update_fn_t u)
+{
+	struct heap *h;
+
+	h = malloc(sizeof(struct heap) + (max_sz * sizeof(void*)) + 1);
+	if (NULL == h) return NULL;
+
+	heap_init(h, max_sz, c, u);
 	return h;
 }
 
-void heap_destroy(struct heap *h)
+void
+heap_destroy(struct heap *h)
 {
 	assert(h && h->data);
 	free(h);
 }
 
-int heap_add(struct heap *h, void *new)
+int
+heap_add(struct heap *h, void *new)
 {
 	int c;
 
 	if (h->max_sz == h->e) return -1;
 
-	debug("heap_add(%p,%d) %p", h, h->e, new);
+	debug("heap_add(%p,%d) %p\n", h, h->e, new);
 
 	assert(!heap_verify(h));
 	c = h->e;
@@ -184,14 +201,17 @@ int heap_add(struct heap *h, void *new)
 	return 0;
 }
 
-void *heap_highest(struct heap *h)
+void *
+heap_highest(struct heap *h)
 {
 	void *r;
 
 	if (h->e == 1) return NULL;
+
 	assert(!heap_verify(h));
 	r = h->data[1];
 	debug("heap_highest(%p,%d) %p\n", h, h->e, r);
+
 	h->e--;
 	h->data[1] = h->data[h->e];
 	h->u(h->data[1], 1);
@@ -202,34 +222,40 @@ void *heap_highest(struct heap *h)
 	return r;
 }
 
-void *heap_peek(struct heap *h)
+void *
+heap_peek(struct heap *h)
 {
 	if (h->e == 1) return NULL;
 	assert(!heap_verify(h));
 	return h->data[1];
 }
 
-void heap_adjust(struct heap *h, int c)
+void
+heap_adjust(struct heap *h, int c)
 {
 	assert(c < h->e);
 	assert(c > 0);
+
 	debug("heap_adjust(%p,%d) %p@%d\n", h, h->e, h->data[c], c);
 	heapify(h, c);
 	assert(!heap_verify(h));
 }
 
-void *heap_remove(struct heap *h, int c)
+void *
+heap_remove(struct heap *h, int c)
 {
 	void *r;
 
 	assert(c < h->e);
 	assert(c >= 1);
 	if (h->e == 1) return NULL;
+
 	assert(!heap_verify(h));
 	r = h->data[c];
 	debug("heap_remove(%p,%d) %p@%d\n", h, h->e, h->data[c], c);
 	h->e--;
 	h->u(r, 0);
+
 	if (c == h->e) {
 		assert(!heap_verify(h));
 		return r;
@@ -242,14 +268,20 @@ void *heap_remove(struct heap *h, int c)
 	return r;
 }
 
-int heap_size(struct heap *h)
-{
-	return h->e-1;
-}
+int
+heap_size(struct heap *h)
+{ return h->e-1; }
 
 #ifdef LINUX_TEST
+#define VAL_BOUND 1000
 
-int c(void *a, void *b) { return ((struct hentry*)a)->value >= ((struct hentry*)b)->value; }
+enum heap_type {
+	MIN = 0,
+	MAX,
+};
+
+int c_min(void *a, void *b) { return ((struct hentry*)a)->value <= ((struct hentry*)b)->value; }
+int c_max(void *a, void *b) { return ((struct hentry*)a)->value >= ((struct hentry*)b)->value; }
 void u(void *e, int pos) { ((struct hentry*)e)->index = pos; }
 
 static void entries_validate(struct heap *h, struct hentry *es, int amnt)
@@ -261,36 +293,42 @@ static void entries_validate(struct heap *h, struct hentry *es, int amnt)
 	}
 }
 
-static void test_driver(int amnt)
+static void test_driver(int amnt, int type)
 {
 	int i;
 	struct hentry *prev, *es;
+	cmp_fn_t c;
 	struct heap *h;
 
+	c = (type == MIN ? c_min : c_max);
 	h = heap_alloc(amnt, c, u);
 	es = malloc(sizeof(struct hentry) * amnt);
 	assert(es);
 
 	for (i = 0 ; i < amnt ; i++) {
-		es[i].value = rand();
+		es[i].value = rand() % VAL_BOUND;
+		printf("adding@%d:%d\n", i, es[i].value);
 		assert(!heap_add(h, &es[i]));
 	}
 	entries_validate(h, es, amnt);
 	for (i = 0 ; i < amnt ; i++) {
-		es[i].value = rand();
+		es[i].value = rand() % VAL_BOUND;
+		printf("adjusting@%d:%d\n", i, es[i].value);
 		heap_adjust(h, es[i].index);
 	}
 	entries_validate(h, es, amnt);
 	prev = h->data[1];
 	for (i = 0 ; i < amnt ; i++) {
 		struct hentry *curr = heap_highest(h);
+		printf("get:%d\n", curr->value);
 		if (!c((struct hentry*)prev, (struct hentry*)curr)) assert(0);
 		prev = curr;
 	}
 	assert(!heap_highest(h));
 	assert(heap_size(h) == 0);
 	for (i = 0 ; i < amnt ; i++) {
-		es[i].value = rand();
+		es[i].value = rand() % VAL_BOUND;
+		printf("adding@%d:%d\n", i, es[i].value);
 		assert(!heap_add(h, &es[i]));
 	}
 	entries_validate(h, es, amnt);
@@ -298,6 +336,7 @@ static void test_driver(int amnt)
 		int idx;
 		idx = (rand() % i) + 1;
 		struct hentry *curr = heap_remove(h, idx);
+		printf("removing:%d\n", curr->value);
 		assert(curr);
 		assert(h->e == i);
 	}
@@ -317,9 +356,13 @@ int main(void)
 
 	srand(time(NULL));
 
-	for (i = 0 ; i < ITER ; i++) {
-		test_driver(rand() % BOUND);
-	}
+//	for (i = 0 ; i < ITER ; i++) {
+//		test_driver(rand() % BOUND);
+//	}
+	printf("MIN-HEAP TEST\n");
+	test_driver(5, MIN);
+	printf("MAX-HEAP TEST\n");
+	test_driver(5, MAX);
 
 	return 0;
 }
