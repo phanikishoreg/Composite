@@ -11,6 +11,7 @@
 #include <cos_defkernel_api.h>
 
 #include <sl.h>
+#include "spinner.h"
 
 #undef assert
 #define assert(node) do { if (unlikely(!(node))) { debug_print("assert error in @ "); *((int *)0) = 0; } } while (0)
@@ -49,15 +50,25 @@ printc(char *fmt, ...)
 }
 
 #define N_TESTTHDS 8
-#define WORKITERS  10000
+#define WORKUSECS  10
+#define WORKDLSECS 200 
 
 void
 test_thd_fn(void *data)
 {
-	while (1) {
-		int workiters = WORKITERS * ((int)data);
+	thdid_t tid = cos_thdid();
 
-		SPIN(workiters);
+	while (1) {
+		microsec_t workcycs = WORKUSECS * ((int)data);
+		cycles_t   deadline, now;
+
+		rdtscll(now);
+		deadline = now + sl_usec2cyc(WORKDLSECS);
+	
+		if (spin_usecs_dl(workcycs, deadline)) {
+			/* printc("%u:miss", tid); */
+		}
+		/* TODO: use block! and some way to wakeup! */
 		sl_thd_yield(0);
 	}
 }
