@@ -11,11 +11,12 @@
 #endif
 
 #define SL_EDF_MAX_THDS MAX_NUM_THREADS
+#define SL_EDF_DL_LOW   TCAP_PRIO_MIN
 
 struct edf_heap {
-	struct heap hs;
-	void *data[SL_EDF_MAX_THDS];
-	char p;
+	struct heap h;
+	void       *data[SL_EDF_MAX_THDS];
+	char        p; /* pad */
 } edf_heap;
 
 struct heap *hs = (struct heap *)&edf_heap;
@@ -44,8 +45,10 @@ sl_mod_block(struct sl_thd_policy *t)
 
 	heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
-	t->prio_idx  = -1;
+	t->priority  = t->deadline;
+	assert(t->priority <= SL_EDF_DL_LOW);
 	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+	t->prio_idx  = -1;
 }
 
 void
@@ -81,12 +84,22 @@ sl_mod_thd_delete(struct sl_thd_policy *t)
 void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
+	cycles_t now;
+
 	assert(type == SCHEDP_WINDOW);
 	t->period_usec = v;
 	t->period = sl_usec2cyc(t->period_usec);
 
-	/* first deadline. assuming arrival time = 0 */
-	t->deadline = t->priority = t->period;
+	/* first deadline. */
+	rdtscll(now);
+	t->deadline = now + t->period;
+	/*
+	 * TODO: 1. tcap_prio_t=48bit! mapping 64bit value to 48bit value.
+	 *          (or, can we make cos_switch/cos_tcap_delegate support prio=64bits?).
+	 *       2. wraparound (64bit or 48bit) logic for deadline-based-heap!
+	 */
+	t->priority = t->deadline;
+	assert(t->priority <= SL_EDF_DL_LOW);
 	heap_adjust(hs, t->prio_idx);
 	debug("param_set= adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 }
