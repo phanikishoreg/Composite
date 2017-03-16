@@ -153,7 +153,6 @@ heap_init(struct heap *h, int max_sz, cmp_fn_t c, update_fn_t u)
 {
 	assert(h);
 
-	/*memset((void *)h, 0, sizeof(struct heap) + (max_sz * sizeof(void*)) + 1);*/
 	h->max_sz = max_sz+1;
 	h->e = 1;
 	h->c = c;
@@ -273,7 +272,7 @@ heap_size(struct heap *h)
 { return h->e-1; }
 
 #ifdef LINUX_TEST
-#define VAL_BOUND 1000
+#define VAL_BOUND 1000000
 
 enum heap_type {
 	MIN = 0,
@@ -320,7 +319,7 @@ static void test_driver(int amnt, int type)
 	prev = h->data[1];
 	for (i = 0 ; i < amnt ; i++) {
 		struct hentry *curr = heap_highest(h);
-		printf("get:%d\n", curr->value);
+		printf("highest:%d\n", curr->value);
 		if (!c((struct hentry*)prev, (struct hentry*)curr)) assert(0);
 		prev = curr;
 	}
@@ -347,7 +346,7 @@ static void test_driver(int amnt, int type)
 	free(es);
 }
 
-#define ITER 50
+#define ITER  10
 #define BOUND 4096
 
 int main(void)
@@ -356,13 +355,14 @@ int main(void)
 
 	srand(time(NULL));
 
-//	for (i = 0 ; i < ITER ; i++) {
-//		test_driver(rand() % BOUND);
-//	}
-	printf("MIN-HEAP TEST\n");
-	test_driver(5, MIN);
-	printf("MAX-HEAP TEST\n");
-	test_driver(5, MAX);
+	for (i = 0 ; i < ITER ; i++) {
+		int items = rand() % BOUND;
+
+		printf("MIN-HEAP TEST - iter:%d items:%d\n", i, items);
+		test_driver(items, MIN);
+		printf("MAX-HEAP TEST - iter:%d items:%d\n", i, items);
+		test_driver(items, MAX);
+	}
 
 	return 0;
 }
