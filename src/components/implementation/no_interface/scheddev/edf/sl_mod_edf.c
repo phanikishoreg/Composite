@@ -19,7 +19,7 @@ struct edf_heap {
 	char        p; /* pad */
 } edf_heap;
 
-struct heap *hs = (struct heap *)&edf_heap;
+static struct heap *hs = (struct heap *)&edf_heap;
 
 void
 sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
