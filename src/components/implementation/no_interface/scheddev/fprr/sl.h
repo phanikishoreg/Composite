@@ -82,7 +82,7 @@ sl_thd_curr(void)
 /* are we the owner of the critical section? */
 static inline int
 sl_cs_owner(void)
-{ return sl__globals()->lock.u.s.owner == sl_thd_curr()->thdcap; }
+{ return sl__globals()->lock.u.s.owner == sl_thd_thd(sl_thd_curr()); }
 
 /* ...not part of the public API */
 void sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdcap_t curr, sched_tok_t tok);
@@ -103,11 +103,11 @@ retry:
 	cached.v = csi.v;
 
 	if (unlikely(csi.s.owner)) {
-		sl_cs_enter_contention(&csi, &cached, t->thdcap, tok);
+		sl_cs_enter_contention(&csi, &cached, sl_thd_thd(t), tok);
 		goto retry;
 	}
 
-	csi.s.owner = t->thdcap;
+	csi.s.owner = sl_thd_thd(t);
 	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) goto retry;
 
 	return;
@@ -193,7 +193,7 @@ sl_cs_exit_schedule_nospin(void)
 	pt     = sl_mod_schedule();
 	if (unlikely(!pt)) t = sl__globals()->idle_thd;
 	else               t = sl_mod_thd_get(pt);
-	thdcap = t->thdcap;
+	thdcap = sl_thd_thd(t);
 	prio   = t->prio;
 
 	sl_cs_exit();
@@ -219,8 +219,25 @@ void sl_thd_yield(thdid_t tid);
 
 /* The entire thread allocation and free API */
 struct sl_thd *sl_thd_alloc(cos_thd_fn_t fn, void *data);
-struct sl_thd *sl_thd_comp_alloc(struct cos_defcompinfo *comp);
+/*
+ * complying to the cos_defkernel_api,
+ * (child) comp should already have it's initthd/initrcv alloc'd if
+ * we have it's cos_defcompinfo object!
+ *
+ * TODO: we might need to create a sndcap to comp->sched_aep->sched_rcv!
+ */
+struct sl_thd *sl_thd_comp_init(struct cos_defcompinfo *comp);
+/*
+ * TODO: free only if alloc'd. 
+ *       free sndcap of child-sched
+ */
 void sl_thd_free(struct sl_thd *t);
+
+/*
+ * uses sched_rcv of the current component for notif!
+ * uses sched_tc of the current component for tcap!
+ */
+struct sl_thd *sl_aepthd_alloc(cos_aepthd_fn_t fn, void *data);
 
 /*
  * Time and timeout API.
@@ -273,6 +290,5 @@ void sl_thd_param_set(struct sl_thd *t, sched_param_t sp);
  */
 void sl_init(void);
 void sl_sched_loop(void);
-
 
 #endif	/* SL_H */

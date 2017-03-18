@@ -8,6 +8,7 @@
 #include <ps.h>
 #include <sl.h>
 #include <sl_mod_policy.h>
+#include <sl_aep.h>
 #include <cos_debug.h>
 #include <cos_kernel_api.h>
 
@@ -20,11 +21,11 @@ struct sl_global sl_global_data;
 void
 sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdcap_t curr, sched_tok_t tok)
 {
-	struct sl_thd *t           = sl_thd_curr();
-	struct sl_global *g        = sl__globals();
+	struct sl_thd    *t = sl_thd_curr();
+	struct sl_global *g = sl__globals();
 
 	/* recursive locks are not allowed */
-	assert(csi->s.owner != t->thdcap);
+	assert(csi->s.owner != sl_thd_thd(t));
 	if (!csi->s.contention) {
 		csi->s.contention = 1;
 		if (!ps_cas(&g->lock.u.v, cached->v, csi->v)) return;
@@ -38,8 +39,8 @@ sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdc
 int
 sl_cs_exit_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, sched_tok_t tok)
 {
-	struct sl_thd    *t        = sl_thd_curr();
-	struct sl_global *g        = sl__globals();
+	struct sl_thd    *t = sl_thd_curr();
+	struct sl_global *g = sl__globals();
 
 	if (!ps_cas(&g->lock.u.v, cached->v, 0)) return 1;
 	/* let the scheduler thread decide which thread to run next, inheriting our budget/priority */
@@ -76,7 +77,6 @@ void
 sl_thd_wakeup(thdid_t tid)
 {
 	struct sl_thd *t;
-	thdcap_t       thdcap;
 	tcap_t         tcap;
 	tcap_prio_t    prio;
 
@@ -116,54 +116,94 @@ sl_thd_yield(thdid_t tid)
 }
 
 static struct sl_thd *
-sl_thd_alloc_init(thdid_t tid, thdcap_t thdcap)
+sl_thd_alloc_init(thdid_t tid, struct cos_aep_info *aep, asndcap_t snd)
 {
-	struct sl_thd_policy   *tp  = NULL;
-	struct sl_thd          *t   = NULL;
+	struct sl_thd_policy *tp  = NULL;
+	struct sl_thd        *t   = NULL;
 
 	tp = sl_thd_alloc_backend(tid);
 	if (!tp) goto done;
 	t = sl_mod_thd_get(tp);
 
+	t->aep    = aep;
 	t->thdid  = tid;
-	t->thdcap = thdcap;
 	t->state  = SL_THD_RUNNABLE;
+	t->sndcap = snd;
 	sl_thd_index_add_backend(sl_mod_thd_policy_get(t));
 
 done:
 	return t;
 }
 
-/* boot_thd = 1 if you want to create a boot-up thread in a separate component */
 static struct sl_thd *
-sl_thd_alloc_intern(cos_thd_fn_t fn, void *data, struct cos_defcompinfo *comp, int boot_thd)
+sl_thd_alloc_intern(cos_thd_fn_t fn, void *data)
 {
 	struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci  = &dci->ci;
 	struct sl_thd          *t   = NULL;
-	thdcap_t thdcap;
+	struct cos_aep_info    *aep = NULL;
 	thdid_t  tid;
 
-	if (!boot_thd) thdcap = cos_thd_alloc(ci, ci->comp_cap, fn, data);
-	else           thdcap = cos_initthd_alloc(ci, comp->ci.comp_cap);
-	if (!thdcap) goto done;
+	aep = sl_aep_alloc();
+	if (!aep) goto done;
 
-	tid = cos_introspect(ci, thdcap, THD_GET_TID);
+	aep->thd = cos_thd_alloc(ci, ci->comp_cap, fn, data);
+	if (!aep->thd) goto done;
+
+	tid = cos_introspect(ci, aep->thd, THD_GET_TID);
 	assert(tid);
-	t = sl_thd_alloc_init(tid, thdcap);
+	t = sl_thd_alloc_init(tid, aep, 0);
 	sl_mod_thd_create(sl_mod_thd_policy_get(t));
 done:
 	return t;
 }
 
+static struct sl_thd *
+sl_aepthd_alloc_intern(cos_aepthd_fn_t fn, void *data, struct cos_defcompinfo *comp, int child_sched)
+{
+	struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
+	struct cos_compinfo    *ci  = &dci->ci;
+	struct sl_thd          *t   = NULL;
+	struct cos_aep_info    *aep = NULL;
+	asndcap_t snd;
+	thdid_t   tid;
+	int       ret;
+
+	aep = sl_aep_alloc();
+	if (!aep) goto done;
+
+	if (!child_sched) {
+		snd = 0;
+		ret = cos_aep_tcap_alloc(aep, sl_thd_aep(sl__globals()->sched_thd)->tc, fn, data);
+		if (ret) goto done;
+		/* we don't need fn & data in sl_thd after this point */
+	} else {
+		*aep = comp->sched_aep; /* shallow */
+		/* TODO: setting sndcap */
+		snd = 0;
+	}
+
+	tid = cos_introspect(ci, aep->thd, THD_GET_TID);
+	assert(tid);
+	t = sl_thd_alloc_init(tid, aep, snd);
+	sl_mod_thd_create(sl_mod_thd_policy_get(t));
+done:
+	return t;
+}
+
+
 struct sl_thd *
 sl_thd_alloc(cos_thd_fn_t fn, void *data)
-{ return sl_thd_alloc_intern(fn, data, NULL, 0); }
+{ return sl_thd_alloc_intern(fn, data); }
 
-/* Allocate a thread that executes in the specified component */
+struct sl_thd *
+sl_aepthd_alloc(cos_aepthd_fn_t fn, void *data)
+{ return sl_aepthd_alloc_intern(fn, data, NULL, 0); }
+
+/* allocate/initialize a sl_thd from component's sched_aep */
 struct sl_thd *
 sl_thd_comp_alloc(struct cos_defcompinfo *comp)
-{ return sl_thd_alloc_intern(NULL, NULL, comp, 1); }
+{ return sl_aepthd_alloc_intern(NULL, NULL, comp, 1); }
 
 void
 sl_thd_free(struct sl_thd *t)
@@ -203,6 +243,7 @@ sl_init(void)
 {
 	struct sl_global       *g  = sl__globals();
 	struct cos_defcompinfo *ci = cos_defcompinfo_curr_get();
+	struct cos_aep_info *aep;
 
 	/* must fit in a word */
 	assert(sizeof(struct sl_cs) <= sizeof(unsigned long));
@@ -211,11 +252,17 @@ sl_init(void)
 	g->lock.u.v     = 0;
 
 	sl_thd_init_backend();
+	sl_aep_init();
 	sl_mod_init();
 	sl_timeout_mod_init();
 
+	/* init a aep struct for scheduler thread */
+	aep      = sl_aep_alloc();
+	aep->thd = BOOT_CAPTBL_SELF_INITTHD_BASE;
+	aep->rcv = BOOT_CAPTBL_SELF_INITRCV_BASE;
+	aep->tc  = BOOT_CAPTBL_SELF_INITTCAP_BASE;
 	/* Create the scheduler thread for us */
-	g->sched_thd    = sl_thd_alloc_init(cos_thdid(), BOOT_CAPTBL_SELF_INITTHD_BASE);
+	g->sched_thd    = sl_thd_alloc_init(cos_thdid(), aep, 0);
 	assert(g->sched_thd);
 	g->sched_thdcap = BOOT_CAPTBL_SELF_INITTHD_BASE;
 
@@ -228,6 +275,8 @@ sl_init(void)
 void
 sl_sched_loop(void)
 {
+	arcvcap_t sched_rcv = sl_thd_aep(sl__globals()->sched_thd)->rcv;
+
 	while (1) {
 		int pending;
 
@@ -244,7 +293,7 @@ sl_sched_loop(void)
 			 * states of it's child threads) and normal notifications (mainly activations from
 			 * it's parent scheduler).
 			 */
-			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &blocked, &cycles);
+			pending = cos_sched_rcv(sched_rcv, &tid, &blocked, &cycles);
 			if (!tid) continue;
 
 			t = sl_thd_lkup(tid);
