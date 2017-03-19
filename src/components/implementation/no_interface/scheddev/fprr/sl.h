@@ -235,6 +235,12 @@ void sl_thd_free(struct sl_thd *t);
 
 /*
  * uses sched_rcv of the current component for notif!
+ * uses tc for tcap!
+ */
+struct sl_thd *sl_aepthd_tcap_alloc(cos_aepthd_fn_t fn, void *data, tcap_t tc);
+
+/*
+ * uses sched_rcv of the current component for notif!
  * uses sched_tc of the current component for tcap!
  */
 struct sl_thd *sl_aepthd_alloc(cos_aepthd_fn_t fn, void *data);

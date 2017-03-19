@@ -18,8 +18,17 @@ typedef enum {
 	SL_THD_DYING,
 } sl_thd_state;
 
+typedef enum {
+	SL_THD_SIMPLE = 0,
+	SL_THD_AEP,
+	SL_THD_AEP_TCAP,        /* AEP with it's own tcap - interrupt handlers! */
+	SL_THD_CHILD_SCHED,
+	SL_THD_CHILD_NOSCHED,   /* Child component invokes parent for scheduling! */
+} sl_thd_type;
+
 struct sl_thd {
 	sl_thd_state         state;
+	sl_thd_type          type;
 	thdid_t              thdid;
 	struct cos_aep_info *aep;
 	asndcap_t            sndcap; /* TODO: unused for now. */
