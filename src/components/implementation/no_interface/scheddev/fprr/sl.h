@@ -140,6 +140,45 @@ static inline cycles_t
 sl_now(void)
 { return ps_tsc(); }
 
+static inline int
+sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
+{
+        struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
+        struct cos_compinfo    *ci  = &dci->ci;
+	struct cos_aep_info *aep;
+	tcap_res_t           budget, repl;
+	int                  ret;
+
+	aep = sl_thd_aep(t);
+	assert(aep);
+	repl = t->budget;
+	t->budget = 0;
+
+	switch (t->type) {
+	case SL_THD_SIMPLE:
+	case SL_THD_AEP:
+	case SL_THD_CHILD_NOSCHED:
+		assert(aep->tc);
+		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
+	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
+		if (repl) {
+			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+			/* TODO: how much exactly to replenish? */
+			if (budget < repl && cos_deftransfer_aep(aep, repl - budget, t->prio)) assert(0);
+		}
+		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
+	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
+		if (repl) {
+			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, 0);
+		}
+		return cos_asnd(t->sndcap, 0);
+	default: assert(0);
+	}
+
+	assert(0);
+}
+
 /*
  * Do a few things: 1. take the critical section if it isn't already
  * taken, 2. call schedule to find the next thread to run, 3. release
@@ -170,8 +209,6 @@ sl_cs_exit_schedule_nospin(void)
 	struct sl_thd_policy *pt;
 	struct sl_thd        *t;
 	struct sl_global     *globals = sl__globals();
-	thdcap_t       thdcap;
-	tcap_prio_t    prio;
 	sched_tok_t    tok;
 	cycles_t       now;
 	s64_t          offset;
@@ -193,13 +230,10 @@ sl_cs_exit_schedule_nospin(void)
 	pt     = sl_mod_schedule();
 	if (unlikely(!pt)) t = sl__globals()->idle_thd;
 	else               t = sl_mod_thd_get(pt);
-	thdcap = sl_thd_thd(t);
-	prio   = t->prio;
 
 	sl_cs_exit();
 
-	/* TODO: enable per-thread tcaps for interrupt threads */
-	return cos_defswitch(thdcap, prio, sl__globals()->timeout_next, tok);
+	return sl_thd_activate(t, tok);
 }
 
 static inline void

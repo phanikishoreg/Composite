@@ -31,8 +31,9 @@ struct sl_thd {
 	sl_thd_type          type;
 	thdid_t              thdid;
 	struct cos_aep_info *aep;
-	asndcap_t            sndcap; /* TODO: unused for now. */
+	asndcap_t            sndcap;
 	tcap_prio_t          prio;
+	tcap_res_t           budget; /* if non-zero, transfer/delegate budget and set to zero */
 	struct sl_thd       *dependency;
 };
 

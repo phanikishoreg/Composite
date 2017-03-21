@@ -130,6 +130,7 @@ sl_thd_alloc_init(thdid_t tid, struct cos_aep_info *aep, asndcap_t snd, sl_thd_t
 	t->state  = SL_THD_RUNNABLE;
 	t->type   = type;
 	t->sndcap = snd;
+	t->budget = 0;
 	sl_thd_index_add_backend(sl_mod_thd_policy_get(t));
 
 done:
