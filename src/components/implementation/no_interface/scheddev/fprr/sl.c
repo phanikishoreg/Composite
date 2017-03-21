@@ -148,6 +148,7 @@ sl_thd_alloc_intern(cos_thd_fn_t fn, void *data)
 	aep = sl_aep_alloc();
 	if (!aep) goto done;
 
+	aep->tc  = sl_thd_aep(sl__globals()->sched_thd)->tc; /* using parent's tcap for simple threads */
 	aep->thd = cos_thd_alloc(ci, ci->comp_cap, fn, data);
 	if (!aep->thd) goto done;
 
@@ -181,8 +182,8 @@ sl_aepthd_alloc_intern(cos_aepthd_fn_t fn, void *data, tcap_t tc, struct cos_def
 		/* we don't need fn & data in sl_thd after this point */
 	} else {
 		*aep = comp->sched_aep; /* shallow */
-		/* TODO: setting sndcap */
-		snd = 0;
+		snd  = cos_asnd_alloc(ci, aep->rcv, ci->captbl_cap);
+		assert(snd);
 	}
 
 	tid = cos_introspect(ci, aep->thd, THD_GET_TID);
