@@ -158,21 +158,30 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 	case SL_THD_SIMPLE:
 	case SL_THD_AEP:
 	case SL_THD_CHILD_NOSCHED:
+	{
 		assert(aep->tc);
+
 		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
+	}
 	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
+	{
 		if (repl) {
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
 			/* TODO: how much exactly to replenish? */
 			if (budget < repl && cos_deftransfer_aep(aep, repl - budget, t->prio)) assert(0);
 		}
+
 		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
+	}
 	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
+	{
 		if (repl) {
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
 			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, 0);
 		}
+
 		return cos_asnd(t->sndcap, 0);
+	}
 	default: assert(0);
 	}
 

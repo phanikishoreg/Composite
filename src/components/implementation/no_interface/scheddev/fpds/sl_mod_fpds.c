@@ -97,20 +97,32 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 	 *       that makes the thread simple FPRR. 
 	 */
 	switch (type) {
-	case SCHEDP_PRIO:   assert(v < SL_FPDS_NPRIOS);
-			    ps_list_rem_d(t); /* if we're already on a list, and we're updating priority */
-			    t->priority = v;
-			    ps_list_head_append_d(&threads[t->priority], t);
-			    break;
-	case SCHEDP_WINDOW: assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
-			    assert (v >= t->budget_usec);
-			    t->period_usec = v;
-			    t->period = sl_usec2cyc(v);
-			    break;
-	case SCHEDP_BUDGET: assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
-			    t->budget_usec = v;
-			    t->budget = sl_usec2cyc(v);
-			    break;
+	case SCHEDP_PRIO:
+	{
+		assert(v < SL_FPDS_NPRIOS);
+		ps_list_rem_d(t); /* if we're already on a list, and we're updating priority */
+		t->priority = v;
+		ps_list_head_append_d(&threads[t->priority], t);
+
+		break;
+	}
+	case SCHEDP_WINDOW:
+	{
+		assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
+		assert (v >= t->budget_usec);
+		t->period_usec = v;
+		t->period = sl_usec2cyc(v);
+
+		break;
+	}
+	case SCHEDP_BUDGET:
+	{
+		assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
+		t->budget_usec = v;
+		t->budget = sl_usec2cyc(v);
+
+		break;
+	}
 	default: assert(0);
 	}
 }
