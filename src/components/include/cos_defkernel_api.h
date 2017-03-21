@@ -74,4 +74,25 @@ int cos_aep_tcap_alloc(struct cos_aep_info *aep, tcap_t tc, cos_aepthd_fn_t fn, 
  */
 int cos_defswitch(thdcap_t c, tcap_prio_t p, tcap_time_t r, sched_tok_t stok);
 
+/*
+ * cos_defswitch_aep: thread switch api using the default scheduling rcv and AEP's tcap.
+ */
+int cos_defswitch_aep(struct cos_aep_info *aep, tcap_prio_t p, tcap_time_t r, sched_tok_t stok);
+
+/*
+ * cos_deftransfer: tcap transfer api to transfer budget form the default scheduling tcap and rcv.
+ */
+int cos_deftransfer(arcvcap_t rc, tcap_res_t res, tcap_prio_t p);
+
+/*
+ * cos_deftransfer_aep: tcap transfer api to transfer budget form the default scheduling tcap and rcv
+ *			to the AEP.
+ */
+int cos_deftransfer_aep(struct cos_aep_info *aep, tcap_res_t res, tcap_prio_t p);
+
+/*
+ * cos_defdelegate: tcap transfer api to transfer budget form the default scheduling tcap and rcv.
+ */
+int cos_defdelegate(asndcap_t sc, tcap_res_t res, tcap_prio_t p, tcap_deleg_flags_t flags);
+
 #endif /* COS_DEFKERNEL_API_H */

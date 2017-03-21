@@ -150,3 +150,50 @@ cos_defswitch(thdcap_t c, tcap_prio_t p, tcap_time_t r, sched_tok_t stok)
 
 	return cos_switch(c, sched_aep->tc, p, r, sched_aep->rcv, stok);
 }
+
+int
+cos_defswitch_aep(struct cos_aep_info *aep, tcap_prio_t p, tcap_time_t r, sched_tok_t stok)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+
+	assert(curr_defci_init_status == INITIALIZED);
+	assert(aep && aep->thd && aep->tc);
+
+	return cos_switch(aep->thd, aep->tc, p, r, sched_aep->rcv, stok);
+}
+
+int
+cos_deftransfer(arcvcap_t rc, tcap_res_t res, tcap_prio_t p)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+	struct cos_compinfo    *ci        = cos_compinfo_get(defci);
+
+	/* TODO: sched aep budget not sufficient? */
+	return cos_tcap_transfer(rc, sched_aep->tc, res, p);
+}
+
+int
+cos_deftransfer_aep(struct cos_aep_info *aep, tcap_res_t res, tcap_prio_t p)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+	struct cos_compinfo    *ci        = cos_compinfo_get(defci);
+
+	assert(aep && aep->rcv);
+
+	/* TODO: sched aep budget not sufficient? */
+	return cos_tcap_transfer(aep->rcv, sched_aep->tc, res, p);
+}
+
+int
+cos_defdelegate(asndcap_t sc, tcap_res_t res, tcap_prio_t p, tcap_deleg_flags_t flags)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+	struct cos_compinfo    *ci        = cos_compinfo_get(defci);
+
+	/* TODO: sched aep budget not sufficient? */
+	return cos_tcap_delegate(sc, sched_aep->tc, res, p, flags);
+}
