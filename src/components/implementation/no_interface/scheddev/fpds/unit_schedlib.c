@@ -52,6 +52,7 @@ printc(char *fmt, ...)
 #define N_TESTTHDS 8
 #define WORKUSECS  10
 #define WORKDLSECS 200 
+static int iters_per_usec;
 
 void
 test_thd_fn(void *data)
@@ -86,6 +87,8 @@ cos_init(void)
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	cos_defcompinfo_init();
 	sl_init();
+	iters_per_usec = spin_iters_per_usec();
+	printc("Iterations per microsecond = %d\n", iters_per_usec);
 
 	/* TODO: test setup! */
 	assert(0);
