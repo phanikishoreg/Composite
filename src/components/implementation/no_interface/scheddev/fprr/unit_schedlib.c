@@ -62,6 +62,7 @@ test_thd_fn(void *data)
 		microsec_t workcycs = WORKUSECS * ((int)data);
 		cycles_t   deadline, now;
 
+		printc("%d", (int)data);
 		rdtscll(now);
 		deadline = now + sl_usec2cyc(WORKDLSECS);
 	
@@ -82,7 +83,7 @@ cos_init(void)
 	struct sl_thd          *threads[N_TESTTHDS];
 	union sched_param       sp    = {.c = {.type = SCHEDP_PRIO, .value = 10}};
 
-	printc("Unit-test for the scheduling library (sl)\n");
+	printc("Unit-test for the scheduling library (sl) with fprr mod\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	cos_defcompinfo_init();
 	sl_init();

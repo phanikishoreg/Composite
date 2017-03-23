@@ -175,10 +175,10 @@ sl_aepthd_alloc_intern(cos_aepthd_fn_t fn, void *data, tcap_t tc, struct cos_def
 	aep = sl_aep_alloc();
 	if (!aep) goto done;
 
-	if (!type == SL_THD_CHILD_SCHED) {
+	if (type != SL_THD_CHILD_SCHED) {
 		snd = 0;
-		if (type == SL_THD_AEP_TCAP) ret = cos_aep_tcap_alloc(aep, sl_thd_aep(sl__globals()->sched_thd)->tc, fn, data);
-		else                         ret = cos_aep_alloc(aep, fn, data);
+		if (type == SL_THD_AEP) ret = cos_aep_tcap_alloc(aep, sl_thd_aep(sl__globals()->sched_thd)->tc, fn, data);
+		else                    ret = cos_aep_alloc(aep, fn, data);
 		if (ret) goto done;
 		/* we don't need fn & data in sl_thd after this point */
 	} else {
@@ -309,8 +309,10 @@ sl_sched_loop(void)
 			/* don't report the idle thread */
 			if (unlikely(t == sl__globals()->idle_thd)) continue;
 			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
-			if (blocked) sl_mod_block(sl_mod_thd_policy_get(t));
-			else         sl_mod_wakeup(sl_mod_thd_policy_get(t));
+
+			if (blocked)     sl_mod_block(sl_mod_thd_policy_get(t));
+			/* tcap expended notification will have blocked = 0 and cycles != 0 */
+			else if(!cycles) sl_mod_wakeup(sl_mod_thd_policy_get(t));
 		} while (pending);
 
 		/* If switch returns an inconsistency, we retry anyway */

@@ -7,7 +7,7 @@
 #define SL_FPDS_HIGHEST 0
 #define SL_FPDS_LOWEST  (SL_FPDS_NPRIOS-1)
 
-#define SL_FPDS_USEC_MIN 10
+#define SL_FPDS_USEC_MIN 1
 #define SL_FPDS_USEC_MAX 10000
 
 struct ps_list_head threads[SL_FPDS_NPRIOS];
@@ -15,7 +15,16 @@ struct ps_list_head threads[SL_FPDS_NPRIOS];
 /* No RR yet */
 void
 sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
-{ }
+{
+	if (!cycles) return;
+
+	if (t->budget) {
+		assert(cycles < (cycles_t)TCAP_RES_MAX);
+		t->expended += (tcap_res_t)cycles;
+
+		if (t->expended >= t->budget) sl_mod_yield(t, NULL);
+	}
+}
 
 struct sl_thd_policy *
 sl_mod_schedule(void)
@@ -35,9 +44,10 @@ sl_mod_schedule(void)
 		assert(td);
 
 		/* if this thread is using DS budget server and we have reached/passed replenishment period */
-		if (t->budget && t->last_period + t->period >= now) {
+		if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
 			t->last_period = now;
 			td->budget     = t->budget;
+			t->expended    = 0;
 		}
 
 		return t;
@@ -56,9 +66,13 @@ sl_mod_block(struct sl_thd_policy *t)
 void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
-	assert(t->priority <= SL_FPDS_LOWEST && ps_list_singleton_d(t));
-
-	ps_list_head_append_d(&threads[t->priority], t);
+	/*
+	 * TODO:
+	 * there are different reasons for getting a number of wakeup events.. 
+	 * 1. cos_asnd on a blocked thread, every such asnd will add a unblocked event to the sched.
+	 * 2. expending tcap-budget, will get a unblocked (not really that) event to the sched.
+	 */
+	sl_mod_yield(t, NULL);
 }
 
 void
@@ -77,6 +91,7 @@ sl_mod_thd_create(struct sl_thd_policy *t)
 	t->period      = 0;
 	t->period_usec = 0;
 	t->budget      = 0;
+	t->expended    = 0;
 	t->budget_usec = 0;
 	t->last_period = 0;
 	ps_list_init_d(t);
@@ -119,7 +134,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 	{
 		assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
 		t->budget_usec = v;
-		t->budget = sl_usec2cyc(v);
+		t->budget = (tcap_res_t)sl_usec2cyc(v);
 
 		break;
 	}

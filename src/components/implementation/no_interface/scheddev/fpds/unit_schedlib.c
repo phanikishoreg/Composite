@@ -50,8 +50,15 @@ printc(char *fmt, ...)
 }
 
 #define N_TESTTHDS 8
-#define WORKUSECS  10
-#define WORKDLSECS 200 
+
+#define DS_E 5
+#define DS_C 10
+#define DS_T 1000
+#define AEPTHD (N_TESTTHDS-2)
+#define SNDTHD (N_TESTTHDS-1)
+
+#define WORKUSECS  DS_E
+#define WORKDLSECS DS_T
 static int iters_per_usec;
 
 void
@@ -60,7 +67,8 @@ test_thd_fn(void *data)
 	thdid_t tid = cos_thdid();
 
 	while (1) {
-		microsec_t workcycs = WORKUSECS * ((int)data);
+		printc("%d", (int)data);
+		microsec_t workcycs = WORKUSECS;
 		cycles_t   deadline, now;
 
 		rdtscll(now);
@@ -75,27 +83,87 @@ test_thd_fn(void *data)
 }
 
 void
+test_aepthd_fn(arcvcap_t rcv, void *data)
+{
+	thdid_t tid = cos_thdid();
+
+	while (1) {
+		printc("%d", AEPTHD);
+		cos_rcv(rcv);
+
+		spin_usecs(DS_E);
+	}
+}
+
+void
+test_sndthd_fn(void *data)
+{
+	thdid_t tid = cos_thdid();
+	asndcap_t snd = (asndcap_t)data;
+
+	while (1) {
+		spin_usecs(DS_T);
+
+		printc("%d", SNDTHD);
+		cos_asnd(snd, 0);
+		sl_thd_yield(0);
+	}
+}
+
+void
 cos_init(void)
 {
 	int                     i;
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
 	struct sl_thd          *threads[N_TESTTHDS];
-	union sched_param       sp    = {.c = {.type = SCHEDP_PRIO, .value = 10}};
+	union sched_param       sp    = {.c = {.type = SCHEDP_PRIO, .value = 10}}, sp1;
+	asndcap_t               snd;
 
-	printc("Unit-test for the scheduling library (sl)\n");
+	printc("Unit-test for the scheduling library (sl) with fpds mod\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	cos_defcompinfo_init();
 	sl_init();
 	iters_per_usec = spin_iters_per_usec();
 	printc("Iterations per microsecond = %d\n", iters_per_usec);
 
-	/* TODO: test setup! */
-	assert(0);
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		threads[i] = sl_thd_alloc(test_thd_fn, (void *)(i+1));
-		assert(threads[i]);
-		sl_thd_param_set(threads[i], sp.v);
+		switch(i) {
+		case AEPTHD:
+		{
+			threads[i] = sl_aepthd_alloc(test_aepthd_fn, NULL);
+			assert(threads[i]);
+			sl_thd_param_set(threads[i], sp.v);
+			sp1.c.type  = SCHEDP_WINDOW;
+			sp1.c.value = DS_T;
+			sl_thd_param_set(threads[i], sp1.v);
+			sp1.c.type  = SCHEDP_BUDGET;
+			sp1.c.value = DS_C;
+			sl_thd_param_set(threads[i], sp1.v);
+
+			break;
+		}
+		case SNDTHD:
+		{
+			assert (SNDTHD > AEPTHD);
+			snd = cos_asnd_alloc(ci, sl_thd_aep(threads[AEPTHD])->rcv, ci->captbl_cap);
+			assert(snd);
+
+			threads[i] = sl_thd_alloc(test_sndthd_fn, (void *)snd);
+			assert(threads[i]);
+			sl_thd_param_set(threads[i], sp.v);
+
+			break;
+		}
+		default:
+		{
+			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
+			assert(threads[i]);
+			sl_thd_param_set(threads[i], sp.v);
+
+			break;
+		}
+		}
 	}
 
 	sl_sched_loop();

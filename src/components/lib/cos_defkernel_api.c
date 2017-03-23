@@ -184,7 +184,7 @@ cos_deftransfer_aep(struct cos_aep_info *aep, tcap_res_t res, tcap_prio_t p)
 	assert(aep && aep->rcv);
 
 	/* TODO: sched aep budget not sufficient? */
-	return cos_tcap_transfer(aep->rcv, sched_aep->tc, res, p);
+	return cos_deftransfer(aep->rcv, res, p);
 }
 
 int

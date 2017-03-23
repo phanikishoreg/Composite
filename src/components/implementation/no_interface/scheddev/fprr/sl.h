@@ -146,13 +146,9 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
         struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
         struct cos_compinfo    *ci  = &dci->ci;
 	struct cos_aep_info *aep;
-	tcap_res_t           budget, repl;
-	int                  ret;
 
 	aep = sl_thd_aep(t);
 	assert(aep);
-	repl = t->budget;
-	t->budget = 0;
 
 	switch (t->type) {
 	case SL_THD_SIMPLE:
@@ -165,9 +161,11 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 	}
 	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
 	{
-		if (repl) {
+		if (t->budget) {
+			tcap_res_t repl = t->budget, budget;
+
+			t->budget = 0;
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
-			/* TODO: how much exactly to replenish? */
 			if (budget < repl && cos_deftransfer_aep(aep, repl - budget, t->prio)) assert(0);
 		}
 
@@ -175,7 +173,10 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 	}
 	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
 	{
-		if (repl) {
+		if (t->budget) {
+			tcap_res_t repl = t->budget, budget;
+
+			t->budget = 0;
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
 			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, 0);
 		}
