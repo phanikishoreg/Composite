@@ -178,10 +178,10 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 
 			t->budget = 0;
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
-			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, 0);
+			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, TCAP_DELEG_YIELD);
 		}
 
-		return cos_asnd(t->sndcap, 0);
+		return cos_asnd(t->sndcap, 1);
 	}
 	default: assert(0);
 	}
