@@ -1,3 +1,6 @@
+#ifndef LLPRINT_H
+#define LLPRINT_H
+
 #include <stdio.h>
 #include <string.h>
 
@@ -30,4 +33,4 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
-
+#endif /* LLPRINT_H */
