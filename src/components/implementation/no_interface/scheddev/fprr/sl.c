@@ -210,7 +210,7 @@ sl_aepthd_alloc(cos_aepthd_fn_t fn, void *data)
 
 /* allocate/initialize a sl_thd from component's sched_aep */
 struct sl_thd *
-sl_thd_comp_alloc(struct cos_defcompinfo *comp)
+sl_thd_comp_init(struct cos_defcompinfo *comp)
 { return sl_aepthd_alloc_intern(NULL, NULL, 0, comp, SL_THD_CHILD_SCHED); }
 
 void
