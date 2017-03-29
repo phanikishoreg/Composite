@@ -58,11 +58,10 @@ cos_defcompinfo_init_ext(tcap_t sched_tc, thdcap_t sched_thd, arcvcap_t sched_rc
 	curr_defci_init_status = INITIALIZED;
 }
 
+/* TODO: is the name apt though? */
 int
-cos_defcompinfo_child_alloc(struct cos_defcompinfo *child_defci, vaddr_t entry, vaddr_t heap_ptr, 
-			    capid_t cap_frontier, int is_sched)
+cos_defcompinfo_child_init(struct cos_defcompinfo *child_defci, int is_sched)
 {
-	int                     ret;
 	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
 	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
 	struct cos_compinfo    *ci        = cos_compinfo_get(defci);
@@ -70,8 +69,6 @@ cos_defcompinfo_child_alloc(struct cos_defcompinfo *child_defci, vaddr_t entry, 
 	struct cos_compinfo    *child_ci  = cos_compinfo_get(child_defci);
 	
 	assert(curr_defci_init_status == INITIALIZED);
-	ret = cos_compinfo_alloc(child_ci, heap_ptr, cap_frontier, entry, ci);
-	if (ret) return ret;
 
 	child_aep->thd = cos_initthd_alloc(ci, child_ci->comp_cap);
 	assert(child_aep->thd);
@@ -91,7 +88,24 @@ cos_defcompinfo_child_alloc(struct cos_defcompinfo *child_defci, vaddr_t entry, 
 	child_aep->fn   = NULL;
 	child_aep->data = NULL;
 
-	return ret;
+	return 0;
+}
+
+int
+cos_defcompinfo_child_alloc(struct cos_defcompinfo *child_defci, vaddr_t entry, vaddr_t heap_ptr, 
+			    capid_t cap_frontier, int is_sched)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+	struct cos_compinfo    *ci        = cos_compinfo_get(defci);
+	struct cos_compinfo    *child_ci  = cos_compinfo_get(child_defci);
+	int ret;
+	
+	assert(curr_defci_init_status == INITIALIZED);
+	ret = cos_compinfo_alloc(child_ci, heap_ptr, cap_frontier, entry, ci);
+	if (ret) return ret;
+
+	return cos_defcompinfo_child_init(child_defci, is_sched);
 }
 
 static void
