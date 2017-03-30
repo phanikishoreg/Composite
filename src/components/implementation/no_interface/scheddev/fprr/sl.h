@@ -108,13 +108,10 @@ sl_cs_enter_nospin(void)
 	csi.v    = sl__globals()->lock.u.v;
 	cached.v = csi.v;
 
-	if (unlikely(csi.s.owner)) {
-		sl_print("R1");
-		return sl_cs_enter_contention(&csi, &cached, sl_thd_thdcap(t), tok);
-	}
+	if (unlikely(csi.s.owner)) return sl_cs_enter_contention(&csi, &cached, sl_thd_thdcap(t), tok);
 
 	csi.s.owner = sl_thd_thdcap(t);
-	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) { sl_print("R2"); return 1; }
+	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) return 1;
 
 	return 0;
 }
@@ -123,6 +120,19 @@ sl_cs_enter_nospin(void)
 static inline void
 sl_cs_enter(void)
 { while (sl_cs_enter_nospin()) ; }
+
+/* Enter into the scheduler critical section from scheduler's context */
+static inline int
+sl_cs_enter_sched(void)
+{
+	int ret;
+
+	do {
+		ret = sl_cs_enter_nospin();
+	} while (ret && ret != -EBUSY);
+
+	return ret;
+}
 
 /*
  * Release the scheduler critical section, switch to the scheduler

@@ -17,16 +17,13 @@ struct sl_global sl_global_data;
 /*
  * These functions are removed from the inlined fast-paths of the
  * critical section (cs) code to save on code size/locality
- *
- * returns 1 if it fails to set contention.
- * returns -ve if thread dispatch fails, especially for outdated token.
- * returns 0 for successful thread dispatch.
  */
 int
 sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdcap_t curr, sched_tok_t tok)
 {
 	struct sl_thd    *t = sl_thd_curr();
 	struct sl_global *g = sl__globals();
+	int ret;
 
 	/* recursive locks are not allowed */
 	assert(csi->s.owner != curr);
@@ -36,7 +33,11 @@ sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdc
 	}
 
 	/* Switch to the owner of the critical section, with inheritance using our tcap/priority */
-	return cos_defswitch(csi->s.owner, t->prio, g->timeout_next, tok);
+	ret = cos_defswitch(csi->s.owner, t->prio, g->timeout_next, tok);
+	if (ret) return ret;
+
+	/* if switch was successful, return to take the lock. */
+	return 1;
 }
 
 /* Return 1 if we need a retry, 0 otherwise */
@@ -290,11 +291,11 @@ sl_sched_loop(void)
 	arcvcap_t sched_rcv = sl_thd_aep(sl__globals()->sched_thd)->rcv;
 
 	while (1) {
-		int pending;
+		int pending, ret;
 
 		do {
 			thdid_t        tid;
-			int            blocked, ret;
+			int            blocked;
 			cycles_t       cycles;
 			struct sl_thd *t;
 
@@ -307,26 +308,22 @@ retry_rcv:
 			pending = cos_sched_rcv(sched_rcv, &tid, &blocked, &cycles);
 			if (!tid) continue;
 
-retry_cs:
-			ret = sl_cs_enter_nospin();
-			if (ret > 0) goto retry_rcv;
-			if (ret < 0) goto retry_cs;
+			ret = sl_cs_enter_sched();
+			if (ret == -EBUSY) goto retry_rcv; /* if there are pending notifications.. */
 
 			t = sl_thd_lkup(tid);
 			assert(t);
-			/* don't report the idle thread */
-			if (unlikely(t == sl__globals()->idle_thd)) {
-				sl_cs_exit();
-				continue;
-			}
-			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
 
+			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
 			if (blocked)     sl_mod_block(sl_mod_thd_policy_get(t));
 			/* tcap expended notification will have blocked = 0 and cycles != 0 */
 			else if(!cycles) sl_mod_wakeup(sl_mod_thd_policy_get(t));
 
 			sl_cs_exit();
 		} while (pending);
+
+		ret = sl_cs_enter_sched();
+		if (ret == -EBUSY) continue; /* if there are pending notifications.. */
 
 		/* If switch returns an inconsistency, we retry anyway */
 		sl_cs_exit_schedule_nospin();

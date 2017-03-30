@@ -650,6 +650,7 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 		if (thd_rcvcap_get_counter(rcvt) > usr_counter)	return -EAGAIN;
 		thd_rcvcap_set_counter(rcvt, usr_counter);
 		if (thd_rcvcap_pending(rcvt) > 0) {
+			if (thd == rcvt) return -EBUSY;
 			next = rcvt;
 			/* tcap inheritance here...use the current tcap to process events */
 			tc      = 0;
