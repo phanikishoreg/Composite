@@ -485,8 +485,12 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 		assert(!(next->state & THD_STATE_PREEMPTED));
 		next->state &= ~THD_STATE_RCVING;
 		thd_state_evt_deliver(next, &a, &b);
-		thd_rcvcap_pending_dec(next);
-		__userregs_setretvals(&next->regs, thd_rcvcap_pending(next), a, b);
+		if (thd_rcvcap_isflushall_get(next)) {
+			__userregs_setretvals(&next->regs, thd_rcvcap_pending_flushall(next), a, b);
+		} else {
+			thd_rcvcap_pending_dec(next);
+			__userregs_setretvals(&next->regs, thd_rcvcap_pending(next), a, b);
+		}
 	}
 
 	/* if it was suspended for budget expiration, clear it */
@@ -806,6 +810,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	struct tcap   *tc_next   = tcap_current(cos_info);
 	struct next_thdinfo *nti = &cos_info->next_ti;
 	tcap_time_t timeout      = TCAP_TIME_NIL;
+	rcv_flags_t rflags       = __userregs_getop(regs);
 
 	if (unlikely(arcv->thd != thd || arcv->cpuid != get_cpuid())) return -EINVAL;
 
@@ -815,8 +820,17 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 
 		__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
 		thd_state_evt_deliver(thd, &a, &b);
-		thd_rcvcap_pending_dec(thd);
-		__userregs_setretvals(regs, thd_rcvcap_pending(thd), a, b);
+		if (rflags & RCV_ALL_PENDING) {
+			__userregs_setretvals(regs, thd_rcvcap_pending_flushall(thd), a, b);
+		} else {
+			thd_rcvcap_pending_dec(thd);
+			__userregs_setretvals(regs, thd_rcvcap_pending(thd), a, b);
+		}
+
+		return 0;
+	} else if (rflags & RCV_NON_BLOCKING) {
+		__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
+		__userregs_setretvals(regs, -EAGAIN, 0, 0);
 
 		return 0;
 	}
@@ -850,6 +864,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	if (likely(thd != next)) {
 		assert(!(thd->state & THD_STATE_PREEMPTED));
 		thd->state |= THD_STATE_RCVING;
+		thd_rcvcap_isflushall_set(thd, !!(rflags & RCV_ALL_PENDING));
 	}
 
 	return cap_switch(regs, thd, next, tc_next, timeout, ci, cos_info);
