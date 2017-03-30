@@ -4,7 +4,7 @@
 #include <sl_plugins.h>
 #include <heap.h>
 
-#ifdef SL_DEBUG
+#ifdef SL_MOD_DEBUG
 #define debug printc
 #else
 #define debug(fmt,...)

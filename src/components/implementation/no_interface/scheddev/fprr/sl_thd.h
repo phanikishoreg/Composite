@@ -50,7 +50,7 @@ sl_thd_aep(struct sl_thd *t)
 { return t->aep; }
 
 static inline thdcap_t
-sl_thd_thd(struct sl_thd *t)
+sl_thd_thdcap(struct sl_thd *t)
 { return sl_thd_aep(t)->thd; }
 
 #endif /* SL_THD_H */

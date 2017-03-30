@@ -17,22 +17,26 @@ struct sl_global sl_global_data;
 /*
  * These functions are removed from the inlined fast-paths of the
  * critical section (cs) code to save on code size/locality
+ *
+ * returns 1 if it fails to set contention.
+ * returns -ve if thread dispatch fails, especially for outdated token.
+ * returns 0 for successful thread dispatch.
  */
-void
+int
 sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdcap_t curr, sched_tok_t tok)
 {
 	struct sl_thd    *t = sl_thd_curr();
 	struct sl_global *g = sl__globals();
 
 	/* recursive locks are not allowed */
-	assert(csi->s.owner != sl_thd_thd(t));
+	assert(csi->s.owner != curr);
 	if (!csi->s.contention) {
 		csi->s.contention = 1;
-		if (!ps_cas(&g->lock.u.v, cached->v, csi->v)) return;
+		if (!ps_cas(&g->lock.u.v, cached->v, csi->v)) return 1;
 	}
+
 	/* Switch to the owner of the critical section, with inheritance using our tcap/priority */
-	cos_defswitch(csi->s.owner, t->prio, g->timeout_next, tok);
-	/* if we have an outdated token, then we want to use the same repeat loop, so return to that */
+	return cos_defswitch(csi->s.owner, t->prio, g->timeout_next, tok);
 }
 
 /* Return 1 if we need a retry, 0 otherwise */
@@ -288,11 +292,9 @@ sl_sched_loop(void)
 	while (1) {
 		int pending;
 
-		sl_cs_enter();
-
 		do {
 			thdid_t        tid;
-			int            blocked;
+			int            blocked, ret;
 			cycles_t       cycles;
 			struct sl_thd *t;
 
@@ -301,18 +303,29 @@ sl_sched_loop(void)
 			 * states of it's child threads) and normal notifications (mainly activations from
 			 * it's parent scheduler).
 			 */
+retry_rcv:
 			pending = cos_sched_rcv(sched_rcv, &tid, &blocked, &cycles);
 			if (!tid) continue;
+
+retry_cs:
+			ret = sl_cs_enter_nospin();
+			if (ret > 0) goto retry_rcv;
+			if (ret < 0) goto retry_cs;
 
 			t = sl_thd_lkup(tid);
 			assert(t);
 			/* don't report the idle thread */
-			if (unlikely(t == sl__globals()->idle_thd)) continue;
+			if (unlikely(t == sl__globals()->idle_thd)) {
+				sl_cs_exit();
+				continue;
+			}
 			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
 
 			if (blocked)     sl_mod_block(sl_mod_thd_policy_get(t));
 			/* tcap expended notification will have blocked = 0 and cycles != 0 */
 			else if(!cycles) sl_mod_wakeup(sl_mod_thd_policy_get(t));
+
+			sl_cs_exit();
 		} while (pending);
 
 		/* If switch returns an inconsistency, we retry anyway */

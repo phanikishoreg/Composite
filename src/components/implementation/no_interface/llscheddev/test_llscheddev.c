@@ -20,10 +20,10 @@
 #define BUG() do { debug_print("BUG @ "); *((int *)0) = 0; } while (0);
 #define SPIN(iters) do { if (iters > 0) { for (; iters > 0 ; iters -- ) ; } else { while (1) ; } } while (0)
 
-#define N_TESTTHDS 8
+#define N_TESTTHDS 2
 
-#define DS_E 5
-#define DS_C 10
+#define DS_E 50
+#define DS_C 100
 #define DS_T 1000
 #define AEPTHD (N_TESTTHDS+2)
 #define SNDTHD (N_TESTTHDS+1)
@@ -38,7 +38,7 @@ test_thd_fn(void *data)
 	thdid_t tid = cos_thdid();
 
 	while (1) {
-		printc("L%u", tid);
+		printc("<%u>", tid);
 		microsec_t workcycs = WORKUSECS;
 		cycles_t   deadline, now;
 
@@ -91,9 +91,8 @@ test_llsched_init(void)
 	union sched_param       sp    = {.c = {.type = SCHEDP_PRIO, .value = 10}}, sp1;
 	asndcap_t               snd;
 
-	printc("Unit-test for the scheduling library (sl) with fpds mod\n");
+	printc("!!FPDS!!\n");
 	iters_per_usec = spin_iters_per_usec();
-	printc("Iterations per microsecond = %d\n", iters_per_usec);
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
 		switch(i) {

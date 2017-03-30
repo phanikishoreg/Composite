@@ -49,9 +49,9 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
-#define N_TESTTHDS 8
-#define WORKUSECS  10
-#define WORKDLSECS 100 
+#define N_TESTTHDS 1
+#define WORKUSECS  80
+#define WORKDLUSECS 100 
 
 void
 test_thd_fn(void *data)
@@ -62,10 +62,10 @@ test_thd_fn(void *data)
 		microsec_t workcycs = WORKUSECS * ((int)data);
 		cycles_t   deadline, now;
 
-		printc("H%u", tid);
+		printc("(%u)", tid);
 		/* TODO: use the deadline set in thd_policy struct */
 		rdtscll(now);
-		deadline = now + sl_usec2cyc(WORKDLSECS);
+		deadline = now + sl_usec2cyc(WORKDLUSECS);
 	
 		if (spin_usecs_dl(workcycs, deadline)) {
 			/* printc("%u:miss", tid); */
@@ -85,13 +85,13 @@ cos_init(void)
 	struct sl_thd          *threads[N_TESTTHDS];
 	union sched_param       sp    = {.c = {.type = SCHEDP_WINDOW, .value = 0}};
 
-	printc("Unit-test for the scheduling library (sl) with edf mod\n");
+	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	cos_defcompinfo_init();
 	sl_init();
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		sp.c.value = (i+1)*100;
+		sp.c.value = WORKDLUSECS;
 		threads[i] = sl_thd_alloc(test_thd_fn, (void *)(i+1));
 		assert(threads[i]);
 		sl_thd_param_set(threads[i], sp.v);

@@ -36,6 +36,12 @@
 #include <sl_mod_policy.h>
 #include <sl_plugins.h>
 
+#if SL_DEBUG
+#define sl_print printc
+#else
+#define sl_print(fmt,...)
+#endif
+
 /* Critical section (cs) API to protect scheduler data-structures */
 struct sl_cs {
 	union sl_cs_intern {
@@ -82,36 +88,41 @@ sl_thd_curr(void)
 /* are we the owner of the critical section? */
 static inline int
 sl_cs_owner(void)
-{ return sl__globals()->lock.u.s.owner == sl_thd_thd(sl_thd_curr()); }
+{ return sl__globals()->lock.u.s.owner == sl_thd_thdcap(sl_thd_curr()); }
 
 /* ...not part of the public API */
-void sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdcap_t curr, sched_tok_t tok);
+int sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdcap_t curr, sched_tok_t tok);
 int sl_cs_exit_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, sched_tok_t tok);
 
 /* Enter into the scheduler critical section */
-static inline void
-sl_cs_enter(void)
+static inline int
+sl_cs_enter_nospin(void)
 {
 	union sl_cs_intern csi, cached;
 	struct sl_thd     *t = sl_thd_curr();
 	sched_tok_t        tok;
+	int                ret;
 
 	assert(t);
-retry:
 	tok      = cos_sched_sync();
 	csi.v    = sl__globals()->lock.u.v;
 	cached.v = csi.v;
 
 	if (unlikely(csi.s.owner)) {
-		sl_cs_enter_contention(&csi, &cached, sl_thd_thd(t), tok);
-		goto retry;
+		sl_print("R1");
+		return sl_cs_enter_contention(&csi, &cached, sl_thd_thdcap(t), tok);
 	}
 
-	csi.s.owner = sl_thd_thd(t);
-	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) goto retry;
+	csi.s.owner = sl_thd_thdcap(t);
+	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) { sl_print("R2"); return 1; }
 
-	return;
+	return 0;
 }
+
+/* Enter into the scheduler critical section */
+static inline void
+sl_cs_enter(void)
+{ while (sl_cs_enter_nospin()) ; }
 
 /*
  * Release the scheduler critical section, switch to the scheduler
@@ -173,10 +184,12 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 	}
 	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
 	{
-		if (t->budget) {
-			tcap_res_t repl = t->budget, budget;
+		tcap_res_t repl = t->budget;
 
-			t->budget = 0;
+		t->budget = 0;
+		if (repl) {
+			tcap_res_t budget;
+
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
 			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, TCAP_DELEG_YIELD);
 		}
@@ -222,8 +235,9 @@ sl_cs_exit_schedule_nospin(void)
 	sched_tok_t    tok;
 	cycles_t       now;
 	s64_t          offset;
+	int            ret;
 
-	if (unlikely(!sl_cs_owner())) sl_cs_enter();
+	if (unlikely(!sl_cs_owner()) && (ret = sl_cs_enter_nospin())) return ret;
 
 	tok    = cos_sched_sync();
 	now    = sl_now();
