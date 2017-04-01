@@ -383,6 +383,10 @@ static inline struct thread *
 thd_current(struct cos_cpu_local_info *cos_info)
 { return (struct thread *)(cos_info->curr_thd); }
 
+static inline struct thread *
+thd_sched(struct cos_cpu_local_info *cos_info)
+{ return (struct thread *)(cos_info->sched_thd); }
+
 static inline void
 thd_current_update(struct thread *next, struct thread *prev, struct cos_cpu_local_info *cos_info)
 {

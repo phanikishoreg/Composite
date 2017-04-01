@@ -204,11 +204,12 @@ tcap_budgets_update(struct cos_cpu_local_info *cos_info, struct thread *t, struc
  * tracked.
  */
 static inline void
-tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_time_t timeout, cycles_t now)
+tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, struct thread *sched, tcap_time_t timeout, cycles_t now)
 {
 	cycles_t timer, timeout_cyc;
 	tcap_res_t left;
 
+	cos_info->sched_thd = NULL;
 	/* next == INF? no timer required. */
 	left        = tcap_left(next);
 	if (timeout == TCAP_TIME_NIL && TCAP_RES_IS_INF(left)) {
@@ -222,6 +223,8 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, tcap_t
 	timeout_cyc = tcap_time2cyc(timeout, now);
 	/* ...or explicit timeout within the bounds of the budget */
 	if (timeout != TCAP_TIME_NIL && timeout_cyc < timer) {
+		cos_info->sched_thd = sched;
+
 		if (tcap_time_lessthan(timeout, tcap_cyc2time(now))) timer = now;
 		else                                                 timer = timeout_cyc;
 	}
