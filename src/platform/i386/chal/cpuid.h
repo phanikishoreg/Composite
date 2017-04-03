@@ -55,6 +55,7 @@ struct cos_cpu_local_info {
 	tcap_prio_t tcap_prio;
 	cycles_t    cycles;
 	cycles_t    next_timer;
+	void       *sched_thd;
 	/*
 	 * cache the stk_top index to save a cacheline access on
 	 * inv/ret. Could use a struct here if need to cache multiple

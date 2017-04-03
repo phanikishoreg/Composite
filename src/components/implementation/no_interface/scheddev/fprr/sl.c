@@ -305,7 +305,7 @@ sl_sched_loop(void)
 			 * it's parent scheduler).
 			 */
 retry_rcv:
-			pending = cos_sched_rcv(sched_rcv, &tid, &blocked, &cycles);
+			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, 0, NULL, &tid, &blocked, &cycles);
 			if (!tid) continue;
 
 			ret = sl_cs_enter_sched();

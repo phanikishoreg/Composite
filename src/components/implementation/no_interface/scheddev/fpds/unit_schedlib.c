@@ -89,7 +89,7 @@ test_aepthd_fn(arcvcap_t rcv, void *data)
 
 	while (1) {
 		printc("%d", AEPTHD);
-		cos_rcv(rcv);
+		cos_rcv(rcv, 0, NULL);
 
 		spin_usecs(DS_E);
 	}

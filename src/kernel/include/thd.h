@@ -33,7 +33,7 @@ struct invstk_entry {
  */
 struct rcvcap_info {
 	/* how many other arcv end-points send notifications to this one? */
-	int isbound, pending, refcnt;
+	int isbound, pending, refcnt, isflushall;
 	sched_tok_t sched_count;
 	struct tcap   *rcvcap_tcap;      /* This rcvcap's tcap */
 	struct thread *rcvcap_thd_notif; /* The parent rcvcap thread for notifications */
@@ -169,7 +169,7 @@ thd_rcvcap_init(struct thread *t)
 {
 	struct rcvcap_info *rc = &t->rcvcap;
 
-	rc->isbound = rc->pending = rc->refcnt = 0;
+	rc->isbound = rc->pending = rc->refcnt = rc->isflushall = 0;
 	rc->sched_count = 0;
 	rc->rcvcap_thd_notif = NULL;
 }
@@ -194,7 +194,30 @@ thd_track_exec(struct thread *t) { return !list_empty(&t->event_list); }
 
 static int
 thd_rcvcap_pending(struct thread *t)
-{ return t->rcvcap.pending || list_first(&t->event_head) != NULL; }
+{
+	if (t->rcvcap.pending) return t->rcvcap.pending;
+	return (list_first(&t->event_head) != NULL);
+}
+
+static void 
+thd_rcvcap_isflushall_set(struct thread *t, int val)
+{ t->rcvcap.isflushall = val; }
+
+static int 
+thd_rcvcap_isflushall_get(struct thread *t)
+{ return t->rcvcap.isflushall; }
+
+static int
+thd_rcvcap_pending_flushall(struct thread *t)
+{
+	int pending = t->rcvcap.pending;
+
+	/* receive all pending */
+	t->rcvcap.pending = 0;
+	thd_rcvcap_isflushall_set(t, 0);
+
+	return ((pending<<1) | (list_first(&t->event_head) != NULL));
+}
 
 static sched_tok_t
 thd_rcvcap_get_counter(struct thread *t)
@@ -213,6 +236,7 @@ thd_rcvcap_pending_dec(struct thread *arcvt)
 {
 	int pending = arcvt->rcvcap.pending;
 
+	assert(thd_rcvcap_isflushall_get(arcvt) == 0);
 	if (pending == 0) return 0;
 	arcvt->rcvcap.pending--;
 
@@ -358,6 +382,10 @@ thd_init(void)
 static inline struct thread *
 thd_current(struct cos_cpu_local_info *cos_info)
 { return (struct thread *)(cos_info->curr_thd); }
+
+static inline struct thread *
+thd_sched(struct cos_cpu_local_info *cos_info)
+{ return (struct thread *)(cos_info->sched_thd); }
 
 static inline void
 thd_current_update(struct thread *next, struct thread *prev, struct cos_cpu_local_info *cos_info)

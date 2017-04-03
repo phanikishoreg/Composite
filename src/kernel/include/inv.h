@@ -160,6 +160,7 @@ __arcv_teardown(struct cap_arcv *arcv, struct thread *thd)
 {
 	struct thread *notif;
 	struct tcap   *tcap;
+	struct cos_cpu_local_info *cos_info = cos_cpu_local_info();
 
 	tcap = thd->rcvcap.rcvcap_tcap;
 	assert(tcap);
@@ -172,6 +173,7 @@ __arcv_teardown(struct cap_arcv *arcv, struct thread *thd)
 	thd->rcvcap.rcvcap_tcap = NULL;
 	tcap_ref_release(tcap);
 	tcap->arcv_ep = NULL;
+	if (thd_sched(cos_info) == thd) cos_info->sched_thd = NULL;
 
 	return 0;
 }
