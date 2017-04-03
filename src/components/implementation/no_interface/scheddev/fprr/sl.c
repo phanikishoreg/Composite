@@ -301,8 +301,9 @@ sl_sched_loop(void)
 
 		do {
 			thdid_t        tid;
-			int            blocked;
+			int            blocked, rcvd;
 			cycles_t       cycles;
+			rcv_flags_t    rf = RCV_ALL_PENDING;
 			struct sl_thd *t;
 
 			/*
@@ -311,7 +312,7 @@ sl_sched_loop(void)
 			 * it's parent scheduler).
 			 */
 retry_rcv:
-			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, 0, NULL, &tid, &blocked, &cycles);
+			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf, &rcvd, &tid, &blocked, &cycles);
 			if (!tid) continue;
 
 			ret = sl_cs_enter_sched();
