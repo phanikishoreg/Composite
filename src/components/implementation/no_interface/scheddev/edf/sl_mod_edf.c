@@ -49,6 +49,8 @@ sl_mod_block(struct sl_thd_policy *t)
 	assert(t->priority <= SL_EDF_DL_LOW);
 	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 	t->prio_idx  = -1;
+
+	sl_timeout_mod_block(sl_mod_thd_get(t), 1, 0);
 }
 
 void

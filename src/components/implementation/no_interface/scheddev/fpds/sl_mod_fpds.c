@@ -61,6 +61,7 @@ void
 sl_mod_block(struct sl_thd_policy *t)
 {
 	ps_list_rem_d(t);
+	sl_timeout_mod_block(sl_mod_thd_get(t), 1, 0);
 }
 
 void

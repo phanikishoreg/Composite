@@ -138,6 +138,8 @@ sl_thd_alloc_init(thdid_t tid, struct cos_aep_info *aep, asndcap_t snd, sl_thd_t
 	t->budget = 0;
 	sl_thd_index_add_backend(sl_mod_thd_policy_get(t));
 
+	t->period = t->wakeup_cycs = 0;
+	t->wakeup_idx = -1;
 done:
 	return t;
 }
@@ -234,6 +236,10 @@ sl_thd_param_set(struct sl_thd *t, sched_param_t sp)
 	unsigned int       value;
 
 	sched_param_get(sp, &type, &value);
+	if (type == SCHEDP_WINDOW) {
+		assert(t->period == 0);
+		t->period = sl_usec2cyc(value);
+	}
 	sl_mod_thd_param_set(sl_mod_thd_policy_get(t), type, value);
 }
 
