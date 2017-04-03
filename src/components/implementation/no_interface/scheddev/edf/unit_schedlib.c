@@ -70,8 +70,9 @@ test_thd_fn(void *data)
 		if (spin_usecs_dl(workcycs, deadline)) {
 			/* printc("%u:miss", tid); */
 		}
+
 		/* TODO: use block! and some way to wakeup! */
-		sl_thd_yield(0);
+		sl_thd_block(0);
 	}
 }
 

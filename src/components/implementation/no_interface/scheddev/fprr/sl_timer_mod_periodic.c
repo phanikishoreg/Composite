@@ -30,7 +30,7 @@ __sl_timeout_mod_wakeup(cycles_t now)
 		th = heap_highest(hs);
 		assert(th && th == tp);
 		th->wakeup_idx = -1;
-		sl_mod_wakeup(sl_mod_thd_policy_get(th));
+		sl_thd_wakeup_cs(th);
 	} while (heap_size(hs));
 }
 

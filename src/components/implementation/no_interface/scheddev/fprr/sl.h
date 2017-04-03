@@ -281,8 +281,10 @@ sl_cs_exit_schedule(void)
  * instead (note that "dependency" is transitive).
  */
 void sl_thd_block(thdid_t tid);
+int sl_thd_block_cs(struct sl_thd *t);
 /* wakeup a thread that has (or soon will) block */
 void sl_thd_wakeup(thdid_t tid);
+int sl_thd_wakeup_cs(struct sl_thd *t);
 void sl_thd_yield(thdid_t tid);
 
 /* The entire thread allocation and free API */

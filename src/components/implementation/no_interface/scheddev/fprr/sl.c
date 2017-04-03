@@ -54,6 +54,19 @@ sl_cs_exit_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, sched
 	return 0;
 }
 
+int
+sl_thd_block_cs(struct sl_thd *t)
+{
+	assert(t);
+
+	if (t->state == SL_THD_BLOCKED) return 1; 
+	assert(t->state == SL_THD_RUNNABLE);
+	t->state = SL_THD_BLOCKED;
+	sl_mod_block(sl_mod_thd_policy_get(t));
+
+	return 0;
+}
+
 void
 sl_thd_block(thdid_t tid)
 {
@@ -64,18 +77,26 @@ sl_thd_block(thdid_t tid)
 
 	sl_cs_enter();
 	t = sl_thd_curr();
-	if (unlikely(t->state == SL_THD_WOKEN)) {
-		t->state = SL_THD_RUNNABLE;
+	if (sl_thd_block_cs(t)) {
 		sl_cs_exit();
 		return;
 	}
-
-	assert(t->state == SL_THD_RUNNABLE);
-	t->state = SL_THD_BLOCKED;
-	sl_mod_block(sl_mod_thd_policy_get(t));
 	sl_cs_exit_schedule();
 
 	return;
+}
+
+int
+sl_thd_wakeup_cs(struct sl_thd *t)
+{
+	assert(t);
+
+	if (t->state == SL_THD_RUNNABLE) return 1;
+	assert(t->state == SL_THD_BLOCKED);
+	t->state = SL_THD_RUNNABLE;
+	sl_mod_wakeup(sl_mod_thd_policy_get(t));
+
+	return 0;
 }
 
 void
@@ -87,16 +108,7 @@ sl_thd_wakeup(thdid_t tid)
 
 	sl_cs_enter();
 	t = sl_thd_lkup(tid);
-	if (unlikely(!t)) goto done;
-
-	if (unlikely(t->state == SL_THD_RUNNABLE)) {
-		t->state = SL_THD_WOKEN;
-		goto done;
-	}
-
-	assert(t->state = SL_THD_BLOCKED);
-	t->state = SL_THD_RUNNABLE;
-	sl_mod_wakeup(sl_mod_thd_policy_get(t));
+	if (unlikely(!t) || sl_thd_wakeup_cs(t)) goto done;
 	sl_cs_exit_schedule();
 
 	return;
@@ -322,9 +334,9 @@ retry_rcv:
 			assert(t);
 
 			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
-			if (blocked)     sl_mod_block(sl_mod_thd_policy_get(t));
+			if (blocked)     sl_thd_block_cs(t); 
 			/* tcap expended notification will have blocked = 0 and cycles != 0 */
-			else if(!cycles) sl_mod_wakeup(sl_mod_thd_policy_get(t));
+			else if(!cycles) sl_thd_wakeup_cs(t);
 
 			sl_cs_exit();
 		} while (pending);

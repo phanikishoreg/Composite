@@ -13,6 +13,13 @@
 typedef enum {
 	SL_THD_FREE = 0,
 	SL_THD_BLOCKED,
+	/*
+	 * TODO: Kernel mechanism for asnds, could send
+	 *       multiple wakeup events (level-triggered) for a single blocked or
+	 *       even a thread that's not blocked but just gets that asnd. So this
+	 *       needs to be handled in the kernel correctly before being able
+	 *       to integrate kernel scheduling events to sched lib events.
+	 */
 	SL_THD_WOKEN, 		/* if a race causes a wakeup before the inevitable block */
 	SL_THD_RUNNABLE,
 	SL_THD_DYING,
