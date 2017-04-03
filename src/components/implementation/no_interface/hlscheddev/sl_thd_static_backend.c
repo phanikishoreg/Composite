@@ -1,1 +1,1 @@
-../scheddev/edf/sl_thd_static_backend.c
+../../sched/edf/sl_thd_static_backend.c

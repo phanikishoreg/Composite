@@ -1,1 +1,1 @@
-../scheddev/edf/sl_timer_mod_periodic.c
+../../sched/edf/sl_timer_mod_periodic.c

@@ -1,1 +1,1 @@
-../scheddev/fpds/sl_timer_mod_periodic.c
+../../sched/fpds/sl_timer_mod_periodic.c

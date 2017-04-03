@@ -1,13 +1,9 @@
-C_OBJS=fp_rr.o
-ASM_OBJS=
-COMPONENT=fprr.o
-INTERFACES=sched sched_hier
-DEPENDENCIES=printc sched_hier
-IF_LIB=../complib.o
-FN_PREPEND=parent_
+#C_OBJS=unit_schedlib.o
+COMPONENT=unit_fprr_sl.o
+INTERFACES=
+DEPENDENCIES=
+IF_LIB=
+ADDITIONAL_LIBS=-lcos_defkernel_api -lcos_kernel_api -lheap
 
-include ../../Makefile.subsubdir
-ifeq (${ENABLE_STACK_MANAGER},1)
-# $(info Using Simple Stack)
- MANDITORY_LIB=simple_stklib.o
-endif
+include ../../../Makefile.subsubdir
+MANDITORY_LIB=simple_stklib.o

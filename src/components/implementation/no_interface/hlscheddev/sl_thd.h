@@ -1,1 +1,1 @@
-../scheddev/edf/sl_thd.h
+../../sched/edf/sl_thd.h

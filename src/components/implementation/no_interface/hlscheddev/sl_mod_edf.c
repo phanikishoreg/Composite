@@ -1,1 +1,1 @@
-../scheddev/edf/sl_mod_edf.c
+../../sched/edf/sl_mod_edf.c
