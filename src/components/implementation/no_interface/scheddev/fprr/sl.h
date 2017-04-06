@@ -37,7 +37,8 @@
 #include <sl_plugins.h>
 
 #if SL_DEBUG
-#define sl_print printc
+#define sl_print(fmt, args...) printc(" %u:" fmt " ", sl_thd_curr()->thdid , ##args)
+//#define sl_print printc
 #else
 #define sl_print(fmt,...)
 #endif
@@ -53,6 +54,8 @@ struct sl_cs {
 	} u;
 };
 
+typedef u64_t sl_sched_tok_t;
+
 struct sl_global {
 	struct sl_cs   lock;
 
@@ -64,6 +67,7 @@ struct sl_global {
 	cycles_t       period;
 	cycles_t       timer_next;
 	tcap_time_t    timeout_next;
+	sl_sched_tok_t sched_tok;
 };
 
 extern struct sl_global sl_global_data;
@@ -108,11 +112,18 @@ sl_cs_enter_nospin(void)
 	csi.v    = sl__globals()->lock.u.v;
 	cached.v = csi.v;
 
-	if (unlikely(csi.s.owner)) return sl_cs_enter_contention(&csi, &cached, sl_thd_thdcap(t), tok);
+	if (unlikely(csi.s.owner)) {
+		sl_print("S0");
+		return sl_cs_enter_contention(&csi, &cached, sl_thd_thdcap(t), tok);
+	}
 
 	csi.s.owner = sl_thd_thdcap(t);
-	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) return 1;
+	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, csi.v)) {
+		sl_print("S1");
+		return 1;
+	}
 
+	sl_print("S2");
 	return 0;
 }
 
@@ -150,11 +161,20 @@ retry:
 	cached.v = csi.v;
 
 	if (unlikely(csi.s.contention)) {
-		if (sl_cs_exit_contention(&csi, &cached, tok)) goto retry;
+		sl_print("E3");
+		if (sl_cs_exit_contention(&csi, &cached, tok)) {
+			sl_print("E0");
+			goto retry;
+		}
+		sl_print("E1");
 		return;
 	}
 
-	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, 0))    goto retry;
+	if (!ps_cas(&sl__globals()->lock.u.v, cached.v, 0)) {
+		sl_print("E2");
+		goto retry;
+	}
+	sl_print("E4");
 }
 
 static inline cycles_t
@@ -162,7 +182,7 @@ sl_now(void)
 { return ps_tsc(); }
 
 static inline int
-sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
+sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_tok_t sltok)
 {
         struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
         struct cos_compinfo    *ci  = &dci->ci;
@@ -171,6 +191,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 	aep = sl_thd_aep(t);
 	assert(aep);
 
+	sl_print("A0=%u ", t->thdid);
 	switch (t->type) {
 	case SL_THD_SIMPLE:
 	case SL_THD_AEP:
@@ -178,33 +199,54 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 	{
 		assert(aep->tc);
 
+		sl_print("A*\n");
 		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
 	}
 	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
 	{
-		if (t->budget) {
-			tcap_res_t repl = t->budget, budget;
-
-			t->budget = 0;
-			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
-			if (budget < repl && cos_deftransfer_aep(aep, repl - budget, t->prio)) assert(0);
-		}
+		if (budget && cos_deftransfer_aep(aep, budget, t->prio)) assert(0);
+//		if (t->budget) {
+//			tcap_res_t repl = t->budget, budget;
+//
+//			t->budget = 0;
+//			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+//			if (budget < repl && cos_deftransfer_aep(aep, repl - budget, t->prio)) assert(0);
+//			sl_print("A1");
+//		}
+			sl_print("A2\n");
 
 		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
 	}
 	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
 	{
-		tcap_res_t repl = t->budget;
-
-		t->budget = 0;
-		if (repl) {
-			tcap_res_t budget;
-
-			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
-			if (budget < repl) return cos_defdelegate(t->sndcap, repl - budget, t->prio, TCAP_DELEG_YIELD);
+		sl_print("A3:%llu:%llu ", sltok, sl__globals()->sched_tok);
+		if (budget) {
+			sl_print("A5\n");
+			if (sl__globals()->sched_tok == sltok) {
+				if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
+				return 0;
+			}
+			return 1;
 		}
+//		tcap_res_t repl = t->budget;
+//
+//		t->budget = 0;
+//		if (repl) {
+//			tcap_res_t budget;
+//
+//			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+//			sl_print("A3\n");
+//			if (budget < repl) {
+//			sl_print("A5:%lu\n", repl-budget);
+//				if(cos_defdelegate(t->sndcap, repl - budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
+//				else                                                                     return 0;
+//			}
+//		}
 
-		return cos_asnd(t->sndcap, 1);
+			sl_print("A4\n");
+		if (sl__globals()->sched_tok == sltok) return cos_asnd(t->sndcap, 1);
+
+		return 0;
 	}
 	default: assert(0);
 	}
@@ -239,13 +281,17 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok)
 static inline int
 sl_cs_exit_schedule_nospin(void)
 {
-	struct sl_thd_policy *pt;
-	struct sl_thd        *t;
-	struct sl_global     *globals = sl__globals();
+        struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
+        struct cos_compinfo    *ci  = &dci->ci;
+	struct sl_thd_policy   *pt;
+	struct sl_thd          *t;
+	struct sl_global       *globals = sl__globals();
 	sched_tok_t    tok;
 	cycles_t       now;
 	s64_t          offset;
 	int            ret;
+	tcap_res_t     budget = 0, repl = 0;
+	sl_sched_tok_t sltok = 0;
 
 	if (unlikely(!sl_cs_owner()) && (ret = sl_cs_enter_nospin())) return ret;
 
@@ -262,12 +308,34 @@ sl_cs_exit_schedule_nospin(void)
 	 * it in a function, here.
 	 */
 	pt     = sl_mod_schedule();
-	if (unlikely(!pt)) t = sl__globals()->idle_thd;
-	else               t = sl_mod_thd_get(pt);
+	if (unlikely(!pt)) {
+		t = sl__globals()->idle_thd;
+	}
+	else {
+		t = sl_mod_thd_get(pt);
+		repl = t->budget;
+		t->budget = 0;
+		
+		if (repl) {
+			struct cos_aep_info *aep = sl_thd_aep(t);
+
+			assert(aep->tc);
+			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+
+			if (budget < repl) budget = repl - budget;
+			else               budget = 0;
+		}
+	}
+
+	if (t->type == SL_THD_CHILD_SCHED) {
+		sltok = __sync_add_and_fetch(&globals->sched_tok, 1);
+//		sltok = globals->sched_tok;
+		sl_print(" K:%llu ", sltok);
+	}
 
 	sl_cs_exit();
 
-	return sl_thd_activate(t, tok);
+	return sl_thd_activate(t, tok, budget, sltok);
 }
 
 static inline void

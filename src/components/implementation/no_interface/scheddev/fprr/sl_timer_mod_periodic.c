@@ -26,6 +26,7 @@ __sl_timeout_mod_wakeup(cycles_t now)
 		assert(tp);
 
 		if (tp->wakeup_cycs > now) break;
+		sl_print("T:%u ", tp->thdid);
 
 		th = heap_highest(hs);
 		assert(th && th == tp);
@@ -37,13 +38,23 @@ __sl_timeout_mod_wakeup(cycles_t now)
 void
 sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
 {
+	cycles_t now;
+
 	assert(t && t->wakeup_idx == -1); /* valid thread and not already in heap */
 	assert(heap_size(hs) < SL_TIMEOUT_MOD_MAX_THDS); /* heap full! */
 
 	if (!(t->period)) assert(!implicit);
 
-	if (implicit) t->wakeup_cycs += t->period; /* implicit wakeups! update to next period */
-	else          t->wakeup_cycs  = wkup_cycs;
+	rdtscll(now);
+	if (implicit) {	
+		t->wakeup_cycs += t->period; /* implicit wakeups! update to next period */
+		while (t->wakeup_cycs < now) {
+			t->wakeup_cycs += t->period;
+		}
+		sl_print("$%u:%llu:%llu$", t->thdid, t->wakeup_cycs, now);
+	} else {
+		t->wakeup_cycs  = wkup_cycs;
+	}
 
 	heap_add(hs, t);
 }

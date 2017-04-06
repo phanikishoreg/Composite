@@ -3,6 +3,14 @@
 #include <sl_mod_policy.h>
 #include <sl_plugins.h>
 
+#ifdef SL_DEBUG_DEADLINES
+#define sl_mod_print printc
+static unsigned long long dl_missed = 0;
+static cycles_t prev = 0;
+#else
+#define sl_mod_print(fmt,...)
+#endif
+
 #define SL_FPDS_NPRIOS  32
 #define SL_FPDS_HIGHEST 0
 #define SL_FPDS_LOWEST  (SL_FPDS_NPRIOS-1)
@@ -50,9 +58,9 @@ sl_mod_schedule(void)
 			t->expended    = 0;
 		}
 
+		sl_print("M:%u\n", td->thdid);
 		return t;
 	}
-	assert(0);
 
 	return NULL;
 }
@@ -60,6 +68,19 @@ sl_mod_schedule(void)
 void
 sl_mod_block(struct sl_thd_policy *t)
 {
+#ifdef SL_DEBUG_DEADLINES
+	cycles_t now;
+
+	rdtscll(now);
+
+	if (now > t->deadline) dl_missed ++;
+	t->deadline += t->period;
+	if (now - prev > sl_usec2cyc(SL_DEBUG_DL_MISS_DIAG_USEC)) {
+		prev = now;
+		sl_mod_print("\nL:%llu\n", dl_missed);
+	}
+#endif
+	sl_print("B%u", sl_mod_thd_get(t)->thdid);
 	ps_list_rem_d(t);
 	sl_timeout_mod_block(sl_mod_thd_get(t), 1, 0);
 }
@@ -67,13 +88,15 @@ sl_mod_block(struct sl_thd_policy *t)
 void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
+	sl_print("W%u", sl_mod_thd_get(t)->thdid);
+	if (ps_list_singleton_d(t)) ps_list_head_append_d(&threads[t->priority], t);
 	/*
 	 * TODO:
 	 * there are different reasons for getting a number of wakeup events.. 
 	 * 1. cos_asnd on a blocked thread, every such asnd will add a unblocked event to the sched.
 	 * 2. expending tcap-budget, will get a unblocked (not really that) event to the sched.
 	 */
-	sl_mod_yield(t, NULL);
+	//sl_mod_yield(t, NULL);
 }
 
 void
@@ -96,6 +119,10 @@ sl_mod_thd_create(struct sl_thd_policy *t)
 	t->budget_usec = 0;
 	t->last_period = 0;
 	ps_list_init_d(t);
+
+#ifdef SL_DEBUG_DEADLINES
+	t->deadline    = ~(cycles_t)0;
+#endif
 }
 
 void
@@ -105,6 +132,7 @@ sl_mod_thd_delete(struct sl_thd_policy *t)
 void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
+	cycles_t now;
 	/*
 	 * TODO: Gets a bit tricky on the order of the params set to validate
 	 *       For now, assume the order param_set(BUDGET)->param_set(WINDOW)->param_set(PRIO)
@@ -125,9 +153,14 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 	case SCHEDP_WINDOW:
 	{
 		assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
-		assert (v >= t->budget_usec);
 		t->period_usec = v;
 		t->period = sl_usec2cyc(v);
+
+#ifdef SL_DEBUG_DEADLINES
+		rdtscll(now);
+		t->deadline = now + t->period;
+		prev = now;
+#endif
 
 		break;
 	}

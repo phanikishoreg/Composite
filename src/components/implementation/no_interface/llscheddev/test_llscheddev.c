@@ -20,17 +20,12 @@
 #define BUG() do { debug_print("BUG @ "); *((int *)0) = 0; } while (0);
 #define SPIN(iters) do { if (iters > 0) { for (; iters > 0 ; iters -- ) ; } else { while (1) ; } } while (0)
 
-#define N_TESTTHDS 2
+#define N_TESTTHDS 3
 
-#define DS_E 50
-#define DS_C 100
-#define DS_T 1000
-#define AEPTHD (N_TESTTHDS+2)
-#define SNDTHD (N_TESTTHDS+1)
-
-#define WORKUSECS  DS_E
-#define WORKDLSECS DS_T
-static int iters_per_usec;
+microsec_t T_array[N_TESTTHDS] = { 1000, 1000, 1000};
+microsec_t C_array[N_TESTTHDS] = { 50, 50, 50};
+microsec_t W_array[N_TESTTHDS] = { 45, 45, 45}; /* actual spin work! not including printing and blocking overheads */
+u32_t prio_array[N_TESTTHDS]   = { 1, 3, 4};
 
 void
 test_thd_fn(void *data)
@@ -38,46 +33,12 @@ test_thd_fn(void *data)
 	thdid_t tid = cos_thdid();
 
 	while (1) {
-		printc("<%u>", tid);
-		microsec_t workcycs = WORKUSECS;
-		cycles_t   deadline, now;
+		microsec_t workusecs = W_array[(int)data];
 
-		rdtscll(now);
-		deadline = now + sl_usec2cyc(WORKDLSECS);
-	
-		if (spin_usecs_dl(workcycs, deadline)) {
-			/* printc("%u:miss", tid); */
-		}
-		/* TODO: use block! and some way to wakeup! */
-		sl_thd_yield(0);
-	}
-}
+	//	printc(" l=%u ", tid);
+		spin_usecs(workusecs);
 
-void
-test_aepthd_fn(arcvcap_t rcv, void *data)
-{
-	thdid_t tid = cos_thdid();
-
-	while (1) {
-		printc("%d", AEPTHD);
-		cos_rcv(rcv, 0, NULL);
-
-		spin_usecs(DS_E);
-	}
-}
-
-void
-test_sndthd_fn(void *data)
-{
-	thdid_t tid = cos_thdid();
-	asndcap_t snd = (asndcap_t)data;
-
-	while (1) {
-		spin_usecs(DS_T);
-
-		printc("%d", SNDTHD);
-		cos_asnd(snd, 0);
-		sl_thd_yield(0);
+		sl_thd_block(0);
 	}
 }
 
@@ -88,49 +49,20 @@ test_llsched_init(void)
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
 	struct sl_thd          *threads[N_TESTTHDS];
-	union sched_param       sp    = {.c = {.type = SCHEDP_PRIO, .value = 10}}, sp1;
+	union sched_param       sp;
 	asndcap_t               snd;
 
-	printc("!!FPDS!!\n");
-	iters_per_usec = spin_iters_per_usec();
+//	printc("!!FPDS!!\n");
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		switch(i) {
-		case AEPTHD:
-		{
-			threads[i] = sl_aepthd_alloc(test_aepthd_fn, NULL);
-			assert(threads[i]);
-			sl_thd_param_set(threads[i], sp.v);
-			sp1.c.type  = SCHEDP_WINDOW;
-			sp1.c.value = DS_T;
-			sl_thd_param_set(threads[i], sp1.v);
-			sp1.c.type  = SCHEDP_BUDGET;
-			sp1.c.value = DS_C;
-			sl_thd_param_set(threads[i], sp1.v);
-
-			break;
-		}
-		case SNDTHD:
-		{
-			assert (SNDTHD > AEPTHD);
-			snd = cos_asnd_alloc(ci, sl_thd_aep(threads[AEPTHD])->rcv, ci->captbl_cap);
-			assert(snd);
-
-			threads[i] = sl_thd_alloc(test_sndthd_fn, (void *)snd);
-			assert(threads[i]);
-			sl_thd_param_set(threads[i], sp.v);
-
-			break;
-		}
-		default:
-		{
-			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
-			assert(threads[i]);
-			sl_thd_param_set(threads[i], sp.v);
-
-			break;
-		}
-		}
+		threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
+		assert(threads[i]);
+		sp.c.type = SCHEDP_PRIO;
+		sp.c.value = prio_array[i];
+		sl_thd_param_set(threads[i], sp.v);
+		sp.c.type  = SCHEDP_WINDOW;
+		sp.c.value = T_array[i];
+		sl_thd_param_set(threads[i], sp.v);
 	}
 
 	sl_sched_loop();

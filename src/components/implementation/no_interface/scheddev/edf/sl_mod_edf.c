@@ -4,10 +4,13 @@
 #include <sl_plugins.h>
 #include <heap.h>
 
-#ifdef SL_MOD_DEBUG
-#define debug printc
-#else
 #define debug(fmt,...)
+#ifdef SL_DEBUG_DEADLINES
+#define sl_mod_print printc
+static unsigned long long dl_missed = 0;
+static cycles_t prev = 0;
+#else
+#define sl_mod_print debug
 #endif
 
 #define SL_EDF_MAX_THDS MAX_NUM_THREADS
@@ -42,6 +45,18 @@ void
 sl_mod_block(struct sl_thd_policy *t)
 {
 	assert(t->prio_idx >= 0);
+
+#ifdef SL_DEBUG_DEADLINES
+	cycles_t now;
+
+	rdtscll(now);
+
+	if (now > t->deadline) dl_missed ++;
+	if (now - prev > sl_usec2cyc(SL_DEBUG_DL_MISS_DIAG_USEC)) {
+		prev = now;
+		sl_mod_print("\nH:%llu\n", dl_missed);
+	}
+#endif
 
 	heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
@@ -95,6 +110,9 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 	/* first deadline. */
 	rdtscll(now);
 	t->deadline = now + t->period;
+#ifdef SL_DEBUG_DEADLINES
+	prev = now;
+#endif
 	/*
 	 * TODO: 1. tcap_prio_t=48bit! mapping 64bit value to 48bit value.
 	 *          (or, can we make cos_switch/cos_tcap_delegate support prio=64bits?).

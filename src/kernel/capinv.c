@@ -500,6 +500,7 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 
 	copy_all_regs(&next->regs, regs);
 
+//	printk(" %u^%u ", curr->tid, next->tid);
 	return preempt;
 }
 
@@ -537,6 +538,7 @@ notify_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap
 	struct thread *next;
 
 	notify_parent(rcv_thd);
+//	printk(" &%u&%u& ", thd->tid, rcv_thd->tid);
 
 	/* The thread switch decision: */
 	if (yield || tcap_higher_prio(rcv_tcap, tcap)) {
@@ -563,8 +565,10 @@ asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
 	thd_rcvcap_pending_inc(rcv_thd);
 	next = notify_process(rcv_thd, thd, rcv_tcap, tcap, tcap_next, yield);
 
-	if (next == thd) tcap_wakeup(rcv_tcap, tcap_sched_info(rcv_tcap)->prio, 0, rcv_thd, cos_info);
-	else             thd_next_thdinfo_update(cos_info, thd, tcap, tcap_sched_info(tcap)->prio, 0);
+	if (!yield) {
+		if (next == thd) tcap_wakeup(rcv_tcap, tcap_sched_info(rcv_tcap)->prio, 0, rcv_thd, cos_info);
+		else             thd_next_thdinfo_update(cos_info, thd, tcap, tcap_sched_info(tcap)->prio, 0);
+	} else thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 
 	return next;
 }
@@ -577,6 +581,7 @@ cap_update(struct pt_regs *regs, struct thread *thd_curr, struct thread *thd_nex
 	struct tcap *tc, *tn;
 	cycles_t now;
 	int switch_away = 0;
+	struct thread *st = thd_sched(cos_info);
 
 	/* which tcap should we use?  is the current expended? */
 	if (tcap_budgets_update(cos_info, thd_curr, tc_curr, &now)) {
@@ -599,7 +604,7 @@ cap_update(struct pt_regs *regs, struct thread *thd_curr, struct thread *thd_nex
 	if (intr_context || switch_away) {
 		timeout = 0;
 		sched   = NULL;
-		thd_next = notify_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
+		/*if (st != thd_next)*/ thd_next = notify_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
 		if (thd_next == thd_curr && tc_next == tc_curr) return (intr_context ? 1 : 0);
 	}
 
@@ -775,9 +780,11 @@ expended_process(struct pt_regs *regs, struct thread *thd_curr, struct comp_info
 	/* get the scheduler thread */
 	if (intr_context && sched_thd) {
 		thd_next = sched_thd;
+//		printk(" %u?%u ", thd_curr->tid, thd_next->tid);
 		assert(thd_next && thd_bound2rcvcap(thd_next));
 	} else {
 		thd_next = thd_rcvcap_sched(tcap_rcvcap_thd(tc_curr));
+//		printk(" %u!%u ", thd_curr->tid, thd_next->tid);
 		assert(thd_next && thd_bound2rcvcap(thd_next) && thd_rcvcap_isreferenced(thd_next));
 	}
 
@@ -848,6 +855,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	}
 
 	next = notify_parent(thd);
+//	printk("%%");
 	/* if preempted/awoken thread is waiting, switch to that */
 	if (nti->thd) {
 		assert(nti->tc);
@@ -862,6 +870,8 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 			timeout = tcap_cyc2time(now + nti->budget);
 		}
 		thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
+
+	//	printk(" [%u:%u] ", thd->tid, next->tid);
 	}
 
 	/* FIXME:  for now, lets just ignore this path...need to plumb tcaps into it */

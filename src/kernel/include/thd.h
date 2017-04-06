@@ -158,6 +158,8 @@ thd_next_thdinfo_update(struct cos_cpu_local_info *cli, struct thread *thd,
 {
 	struct next_thdinfo *nti = &cli->next_ti;
 
+//	if(thd) printk(" U:%u ", thd->tid);
+//	else    printk(" U:N ");
 	nti->thd    = thd;
 	nti->tc     = tc;
 	nti->prio   = prio;

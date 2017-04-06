@@ -49,9 +49,11 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
-#define N_TESTTHDS 1
-#define WORKUSECS  80
-#define WORKDLUSECS 100 
+#define N_TESTTHDS 3
+
+microsec_t T_array[N_TESTTHDS] = { 1000, 1000, 1000};
+microsec_t C_array[N_TESTTHDS] = { 15, 30, 30};
+microsec_t W_array[N_TESTTHDS] = { 10, 25, 25}; /* actual spin work! not including printing, blocking overheads */
 
 void
 test_thd_fn(void *data)
@@ -59,22 +61,13 @@ test_thd_fn(void *data)
 	thdid_t tid = cos_thdid();
 
 	while (1) {
-		microsec_t workcycs = WORKUSECS * ((int)data);
-		cycles_t   deadline, now;
-
-		printc("(%u)", tid);
-		/* TODO: use the deadline set in thd_policy struct */
-		rdtscll(now);
-		deadline = now + sl_usec2cyc(WORKDLUSECS);
+		microsec_t workusecs = W_array[(int)data];
 	
-		if (spin_usecs_dl(workcycs, deadline)) {
-			/* printc("%u:miss", tid); */
-		}
-		/* TODO: use block! and some way to wakeup! */
-		sl_thd_yield(0);
+//		printc("h=%u", tid);
+		spin_usecs(workusecs);
+		sl_thd_block(0);
 	}
 }
-
 
 void
 cos_init(void)
@@ -85,15 +78,15 @@ cos_init(void)
 	struct sl_thd          *threads[N_TESTTHDS];
 	union sched_param       sp    = {.c = {.type = SCHEDP_WINDOW, .value = 0}};
 
-	printc("EDF!!\n");
+//	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	cos_defcompinfo_init();
 	sl_init();
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		sp.c.value = WORKDLUSECS;
-		threads[i] = sl_thd_alloc(test_thd_fn, (void *)(i+1));
+		threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
 		assert(threads[i]);
+		sp.c.value = T_array[i];
 		sl_thd_param_set(threads[i], sp.v);
 	}
 

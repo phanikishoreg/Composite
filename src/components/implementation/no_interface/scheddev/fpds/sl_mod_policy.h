@@ -11,6 +11,11 @@ struct sl_thd_policy {
 	cycles_t       period, last_period;
 	tcap_res_t     budget, expended;
 	struct ps_list list;
+
+#ifdef SL_DEBUG_DEADLINES
+	cycles_t       deadline;
+#endif
+
 };
 
 static inline struct sl_thd *

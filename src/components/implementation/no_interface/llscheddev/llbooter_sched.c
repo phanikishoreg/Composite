@@ -4,8 +4,9 @@
 #include <boot_deps.h>
 #include <sl.h>
 
-#define CHILD_WCET_C   100 //usecs
-#define CHILD_PERIOD_T 150 //usecs
+#define CHILD_WCET_C   200 //usecs
+#define CHILD_PERIOD_T 1000 //usecs
+#define CHILD_PRIO     2
 
 /*Component init info*/
 #define INIT_STR_SZ 52
@@ -228,7 +229,7 @@ boot_init_sched(void)
 	sl_init();
 
 	for (i = 1 ; i <= n_comps ; i++) {
-		union sched_param sp = {.c = {.type = SCHEDP_PRIO, .value = 10}};
+		union sched_param sp = {.c = {.type = SCHEDP_PRIO, .value = CHILD_PRIO}};
 
 		new_comp_cap_info[i].t = sl_thd_comp_init(&(new_comp_cap_info[i].defci));
 		assert(new_comp_cap_info[i].t);

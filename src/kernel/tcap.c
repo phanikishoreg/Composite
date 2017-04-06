@@ -236,9 +236,11 @@ tcap_wakeup(struct tcap *tc, tcap_prio_t prio, tcap_res_t budget,
 	tcap_setprio(tc, prio);
 	ret = tcap_higher_prio(tc, nti->tc);
 	tcap_setprio(tc, tmpprio);
+//	if(nti->thd) printk(" {%u %u} ", ((struct thread *)(nti->thd))->tid, thd->tid);
 	if (!ret) return 0;
 
 fixup:
+//	if(nti->thd) printk(" {%u %u} ", ((struct thread *)(nti->thd))->tid, thd->tid);
 	thd_next_thdinfo_update(cli, thd, tc, prio, budget);
 	return 0;
 }

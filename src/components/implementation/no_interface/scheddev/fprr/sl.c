@@ -29,13 +29,14 @@ sl_cs_enter_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, thdc
 	assert(csi->s.owner != curr);
 	if (!csi->s.contention) {
 		csi->s.contention = 1;
-		if (!ps_cas(&g->lock.u.v, cached->v, csi->v)) return 1;
+		if (!ps_cas(&g->lock.u.v, cached->v, csi->v)) { sl_print("C0"); return 1; }
 	}
 
 	/* Switch to the owner of the critical section, with inheritance using our tcap/priority */
 	ret = cos_defswitch(csi->s.owner, t->prio, g->timeout_next, tok);
-	if (ret) return ret;
+	if (ret) { sl_print("C1"); return ret; }
 
+	sl_print("C2");
 	/* if switch was successful, return to take the lock. */
 	return 1;
 }
@@ -47,10 +48,11 @@ sl_cs_exit_contention(union sl_cs_intern *csi, union sl_cs_intern *cached, sched
 	struct sl_thd    *t = sl_thd_curr();
 	struct sl_global *g = sl__globals();
 
-	if (!ps_cas(&g->lock.u.v, cached->v, 0)) return 1;
+	if (!ps_cas(&g->lock.u.v, cached->v, 0)) { sl_print("X0"); return 1; }
 	/* let the scheduler thread decide which thread to run next, inheriting our budget/priority */
-	cos_defswitch(g->sched_thdcap, t->prio, g->timeout_next, tok);
+	if (cos_defswitch(g->sched_thdcap, t->prio, g->timeout_next, tok)) { sl_print("X3"); return 0; }
 
+	sl_print("X1");
 	return 0;
 }
 
@@ -59,11 +61,20 @@ sl_thd_block_cs(struct sl_thd *t)
 {
 	assert(t);
 
-	if (t->state == SL_THD_BLOCKED) return 1; 
+	if (t->state == SL_THD_WOKEN) {
+		sl_print("Q0:%u ", t->thdid);
+		t->state = SL_THD_RUNNABLE;
+		return 1;
+	}
+//	if (t->state == SL_THD_BLOCKED) {
+		//if (t == sl_thd_curr()) return 0;
+//		sl_print("Q0:%u ", t->thdid); return 1;
+//	}
 	assert(t->state == SL_THD_RUNNABLE);
 	t->state = SL_THD_BLOCKED;
 	sl_mod_block(sl_mod_thd_policy_get(t));
 
+	sl_print("Q1:%u ", t->thdid);
 	return 0;
 }
 
@@ -78,6 +89,7 @@ sl_thd_block(thdid_t tid)
 	sl_cs_enter();
 	t = sl_thd_curr();
 	if (sl_thd_block_cs(t)) {
+		sl_print("V0");
 		sl_cs_exit();
 		return;
 	}
@@ -91,11 +103,18 @@ sl_thd_wakeup_cs(struct sl_thd *t)
 {
 	assert(t);
 
-	if (t->state == SL_THD_RUNNABLE) return 1;
+//	if (t->state == SL_THD_RUNNABLE) { sl_print("U0:%u ", t->thdid); return 1; }
+	if (t->state == SL_THD_RUNNABLE) {
+		sl_print("U0:%u ", t->thdid);
+		t->state = SL_THD_WOKEN;
+		return 1;
+	}
+
 	assert(t->state == SL_THD_BLOCKED);
 	t->state = SL_THD_RUNNABLE;
 	sl_mod_wakeup(sl_mod_thd_policy_get(t));
 
+	sl_print("U1:%u ", t->thdid);
 	return 0;
 }
 
@@ -108,12 +127,13 @@ sl_thd_wakeup(thdid_t tid)
 
 	sl_cs_enter();
 	t = sl_thd_lkup(tid);
-	if (unlikely(!t) || sl_thd_wakeup_cs(t)) goto done;
+	if (unlikely(!t) || sl_thd_wakeup_cs(t)) {
+		sl_print("K0");
+		sl_cs_exit();
+		return;
+	}
 	sl_cs_exit_schedule();
 
-	return;
-done:
-	sl_cs_exit();
 	return;
 }
 
@@ -281,6 +301,7 @@ sl_init(void)
 
 	g->cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 	g->lock.u.v     = 0;
+	g->sched_tok    = 0;
 
 	sl_thd_init_backend();
 	sl_aep_init();
@@ -310,12 +331,14 @@ sl_sched_loop(void)
 
 	while (1) {
 		int pending, ret;
+		rcv_flags_t rf_def = RCV_ALL_PENDING, rf_use;
 
+		rf_use = rf_def;// | RCV_NON_BLOCKING;
 		do {
 			thdid_t        tid;
 			int            blocked, rcvd;
 			cycles_t       cycles;
-			rcv_flags_t    rf = RCV_ALL_PENDING;
+			//rcv_flags_t    rf = RCV_ALL_PENDING | RCV_NON_BLOCKING;
 			struct sl_thd *t;
 
 			/*
@@ -324,27 +347,49 @@ sl_sched_loop(void)
 			 * it's parent scheduler).
 			 */
 retry_rcv:
-			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf, &rcvd, &tid, &blocked, &cycles);
-			if (!tid) continue;
+//			sl_print(" %u:a ", sl_thd_curr()->thdid);
+			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf_use, &rcvd, &tid, &blocked, &cycles);
+			if (pending == -EAGAIN) {
+				rf_use = rf_def;
+				sl_print("j");
+				continue;
+			}
+			if (!tid) { 
+				sl_print("i");
+				continue;
+			}
 
+			sl_print("b=%d,%d,%u,%d,%llu", pending, rcvd, tid, blocked, cycles);
 			ret = sl_cs_enter_sched();
-			if (ret == -EBUSY) goto retry_rcv; /* if there are pending notifications.. */
+			if (ret == -EBUSY) { 
+			sl_print("c");
+				goto retry_rcv; /* if there are pending notifications.. */
+			}
 
+			sl_print("d");
 			t = sl_thd_lkup(tid);
 			assert(t);
 
 			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
-			if (blocked)     sl_thd_block_cs(t); 
+			if (blocked)     { sl_print("B+"); sl_thd_block_cs(t); }
 			/* tcap expended notification will have blocked = 0 and cycles != 0 */
-			else if(!cycles) sl_thd_wakeup_cs(t);
+			else if(!cycles) { sl_print("W+"); sl_thd_wakeup_cs(t); }
 
+			sl_print("e");
 			sl_cs_exit();
 		} while (pending);
 
+		sl_print("f");
 		ret = sl_cs_enter_sched();
-		if (ret == -EBUSY) continue; /* if there are pending notifications.. */
+		if (ret == -EBUSY) {
 
+			sl_print("g");
+			continue; /* if there are pending notifications.. */
+		}
+
+			sl_print("h");
 		/* If switch returns an inconsistency, we retry anyway */
 		sl_cs_exit_schedule_nospin();
+			sl_print("k");
 	}
 }
