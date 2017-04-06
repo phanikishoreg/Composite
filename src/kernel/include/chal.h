@@ -97,6 +97,9 @@ void chal_idle(void);
 void chal_timer_set(cycles_t cycles);
 void chal_timer_disable(void);
 
+void chal_hpet_periodic_set(unsigned long usecs);
+void chal_hpet_disable(void);
+
 void chal_init(void);
 
 /* int cos_syscall_idle(void); */

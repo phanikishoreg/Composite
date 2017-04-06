@@ -368,6 +368,42 @@ spinner(void *d)
 
 cycles_t cyc_per_usec;
 
+#define TEST_USEC_INTERVAL 1000 /* in microseconds */
+#define TEST_HPET_ITERS    100
+cycles_t iat_vals[TEST_HPET_ITERS - 1];
+
+static void
+test_hpet_timer(void)
+{
+	int      i;
+	thdcap_t tc;
+	cycles_t c = 0, p = 0, t = 0;
+
+	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
+	tc = cos_thd_alloc(&booter_info, booter_info.comp_cap, spinner, NULL);
+	cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, BOOT_CAPTBL_SELF_INITRCV_BASE, TEST_USEC_INTERVAL);
+
+	for (i = 0 ; i <= TEST_HPET_ITERS ; i++) {
+		thdid_t     tid;
+		int         blocked;
+		cycles_t    cycles;
+
+		cos_switch(tc, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, TCAP_TIME_NIL, 0, cos_sched_sync());
+		p     = c;
+		rdtscll(c);
+		if (i > 0) {
+			t += c-p;
+			iat_vals[i - 1] = c - p;
+		}
+	}
+
+	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
+	for (i = 0 ; i < TEST_HPET_ITERS ; i += 10) {
+		PRINTC("%llu ", iat_vals[i]);
+	}
+}
+
+
 static void
 test_timer(void)
 {
@@ -888,6 +924,7 @@ test_captbl_expand(void)
 void
 test_run_mb(void)
 {
+	test_hpet_timer();
 	test_timer();
 	test_budgets();
 

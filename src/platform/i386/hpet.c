@@ -256,6 +256,25 @@ timer_find_hpet(void *timer)
 }
 
 void
+chal_hpet_periodic_set(unsigned long usecs_period)
+{
+	unsigned long pico_per_hpetcyc, hpetcyc_per_period;
+
+	assert(timer_calibration_init == 0);
+	pico_per_hpetcyc   = hpet_capabilities[1] / FEMPTO_PER_PICO;
+	hpetcyc_per_period = (usecs_period * PICO_PER_MICRO) / pico_per_hpetcyc;
+
+	timer_set(TIMER_PERIODIC, hpetcyc_per_period);
+}
+
+void
+chal_hpet_disable(void)
+{
+	timer_disable(0);
+	timer_disable(0);
+}
+
+void
 timer_set_hpet_page(u32_t page)
 {
 	hpet              = (void*)(page * (1 << 22) | ((u32_t)hpet & ((1<<22)-1)));
