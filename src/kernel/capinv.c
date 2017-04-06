@@ -18,6 +18,7 @@
 
 #define COS_DEFAULT_RET_CAP 0
 
+static int print_this;
 /*
  * TODO: switch to a dedicated TLB flush thread (in a separate
  * protection domain) to do this.
@@ -446,8 +447,17 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 	int               preempt = 0;
 
 	if (unlikely(curr == next)) {
-		if (!(curr->state & THD_STATE_SUSPENDED))
-			assert(!(curr->state & (THD_STATE_RCVING)) && !(curr->state & THD_STATE_PREEMPTED));
+		if(print_this) {
+			print_this = 0;
+			printk(" %u^%u ", curr->tid, next->tid);
+		}
+		assert(!(curr->state & THD_STATE_RCVING));
+
+		if (curr->state & THD_STATE_PREEMPTED) {
+			curr->state &= ~THD_STATE_PREEMPTED;
+			return 1;
+		}
+
 		__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
 		return 0;
 	}
@@ -493,13 +503,15 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 		}
 	}
 
-	/* if it was suspended for budget expiration, clear it */
-	next->state &= ~THD_STATE_SUSPENDED;
 	/* if switching to the preempted/awoken thread clear cpu local next_thdinfo */
 	if (nti->thd && nti->thd == next) thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 
 	copy_all_regs(&next->regs, regs);
 
+	if(print_this) {
+		print_this = 0;
+		printk(" %u^%u ", curr->tid, next->tid);
+	}
 //	printk(" %u^%u ", curr->tid, next->tid);
 	return preempt;
 }
@@ -616,8 +628,6 @@ cap_update(struct pt_regs *regs, struct thread *thd_curr, struct thread *thd_nex
 		/* update only tcap and return to curr thread */
 		if (thd_next == thd_curr) return 1;
 		thd_curr->state |= THD_STATE_PREEMPTED;
-	} else if (switch_away) {
-		thd_curr->state |= THD_STATE_SUSPENDED;
 	}
 
 	/* switch threads */
@@ -765,6 +775,7 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 	if (next == thd) return 1;
 	thd->state |= THD_STATE_PREEMPTED;
 
+	print_this = 1;
 	return cap_switch(regs, thd, next, tcap_next, TCAP_TIME_NIL, NULL, ci, cos_info);
 }
 
@@ -818,6 +829,7 @@ timer_process(struct pt_regs *regs)
 	comp     = thd_invstk_current(thd_curr, &ip, &sp, cos_info);
 	assert(comp);
 
+	print_this = 1;
 	return expended_process(regs, thd_curr, comp, cos_info, 1);
 }
 
@@ -889,6 +901,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 		thd_rcvcap_isflushall_set(thd, !!(rflags & RCV_ALL_PENDING));
 	}
 
+	print_this = 1;
 	return cap_switch(regs, thd, next, tc_next, timeout, NULL, ci, cos_info);
 }
 

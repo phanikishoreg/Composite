@@ -44,8 +44,6 @@ sl_mod_schedule(void)
 void
 sl_mod_block(struct sl_thd_policy *t)
 {
-	assert(t->prio_idx >= 0);
-
 #ifdef SL_DEBUG_DEADLINES
 	cycles_t now;
 
@@ -57,6 +55,7 @@ sl_mod_block(struct sl_thd_policy *t)
 		sl_mod_print("\nH:%llu\n", dl_missed);
 	}
 #endif
+	if (t->prio_idx < 0) return;
 
 	heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
@@ -71,7 +70,8 @@ sl_mod_block(struct sl_thd_policy *t)
 void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
-	assert(t->prio_idx < 0);
+	//assert(t->prio_idx < 0);
+	if (t->prio_idx >= 0) return;
 
 	heap_add(hs, t);
 	debug("wakeup= add idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);

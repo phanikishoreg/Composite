@@ -8,16 +8,6 @@ static void
 cos_llprint(char *s, int len)
 { call_cap(PRINT_CAP_TEMP, (int)s, len, 0, 0); }
 
-int
-prints(char *s)
-{
-		int len = strlen(s);
-
-		cos_llprint(s, len);
-
-		return len;
-}
-
 int __attribute__((format(printf,1,2)))
 printc(char *fmt, ...)
 {
@@ -31,6 +21,17 @@ printc(char *fmt, ...)
 	  cos_llprint(s, ret);
 
 	  return ret;
+}
+
+int
+prints(char *s)
+{
+	int len = strlen(s);
+
+	printc("%u:", cos_thdid());
+	cos_llprint(s, len);
+
+	return len;
 }
 
 #endif /* LLPRINT_H */

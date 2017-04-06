@@ -68,6 +68,7 @@ sl_mod_schedule(void)
 void
 sl_mod_block(struct sl_thd_policy *t)
 {
+	sl_print("B%u", sl_mod_thd_get(t)->thdid);
 #ifdef SL_DEBUG_DEADLINES
 	cycles_t now;
 
@@ -80,7 +81,6 @@ sl_mod_block(struct sl_thd_policy *t)
 		sl_mod_print("\nL:%llu\n", dl_missed);
 	}
 #endif
-	sl_print("B%u", sl_mod_thd_get(t)->thdid);
 	ps_list_rem_d(t);
 	sl_timeout_mod_block(sl_mod_thd_get(t), 1, 0);
 }
@@ -89,14 +89,13 @@ void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
 	sl_print("W%u", sl_mod_thd_get(t)->thdid);
-	if (ps_list_singleton_d(t)) ps_list_head_append_d(&threads[t->priority], t);
 	/*
 	 * TODO:
 	 * there are different reasons for getting a number of wakeup events.. 
 	 * 1. cos_asnd on a blocked thread, every such asnd will add a unblocked event to the sched.
 	 * 2. expending tcap-budget, will get a unblocked (not really that) event to the sched.
 	 */
-	//sl_mod_yield(t, NULL);
+	sl_mod_yield(t, NULL);
 }
 
 void

@@ -110,7 +110,8 @@ sl_thd_wakeup_cs(struct sl_thd *t)
 		return 1;
 	}
 
-	assert(t->state == SL_THD_BLOCKED);
+	/* wakeup events can be many. they could come when the thread is in any of the BLOCKED, RUNNABLE, WOKEN states */
+	assert(t->state == SL_THD_BLOCKED || t->state == SL_THD_WOKEN);
 	t->state = SL_THD_RUNNABLE;
 	sl_mod_wakeup(sl_mod_thd_policy_get(t));
 
@@ -347,7 +348,7 @@ sl_sched_loop(void)
 			 * it's parent scheduler).
 			 */
 retry_rcv:
-//			sl_print(" %u:a ", sl_thd_curr()->thdid);
+			sl_print("a");
 			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf_use, &rcvd, &tid, &blocked, &cycles);
 			if (pending == -EAGAIN) {
 				rf_use = rf_def;
@@ -371,9 +372,9 @@ retry_rcv:
 			assert(t);
 
 			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
-			if (blocked)     { sl_print("B+"); sl_thd_block_cs(t); }
+			if (blocked)     { sl_print("B+"); /*sl_thd_block_cs(t);*/ sl_mod_block(sl_mod_thd_policy_get(t)); }
 			/* tcap expended notification will have blocked = 0 and cycles != 0 */
-			else if(!cycles) { sl_print("W+"); sl_thd_wakeup_cs(t); }
+			else if(!cycles) { sl_print("W+"); /*sl_thd_wakeup_cs(t);*/ sl_mod_wakeup(sl_mod_thd_policy_get(t)); }
 
 			sl_print("e");
 			sl_cs_exit();

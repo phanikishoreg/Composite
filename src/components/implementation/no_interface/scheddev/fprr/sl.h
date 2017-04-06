@@ -191,6 +191,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 	aep = sl_thd_aep(t);
 	assert(aep);
 
+	//printc("#%u=>%u#", cos_thdid(), t->thdid);
 	sl_print("A0=%u ", t->thdid);
 	switch (t->type) {
 	case SL_THD_SIMPLE:
@@ -205,15 +206,8 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
 	{
 		if (budget && cos_deftransfer_aep(aep, budget, t->prio)) assert(0);
-//		if (t->budget) {
-//			tcap_res_t repl = t->budget, budget;
-//
-//			t->budget = 0;
-//			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
-//			if (budget < repl && cos_deftransfer_aep(aep, repl - budget, t->prio)) assert(0);
-//			sl_print("A1");
-//		}
-			sl_print("A2\n");
+		t->budget = 0;
+		sl_print("A2\n");
 
 		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
 	}
@@ -223,6 +217,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 		if (budget) {
 			sl_print("A5\n");
 			if (sl__globals()->sched_tok == sltok) {
+				t->budget = 0;
 				if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
 				return 0;
 			}
@@ -314,7 +309,7 @@ sl_cs_exit_schedule_nospin(void)
 	else {
 		t = sl_mod_thd_get(pt);
 		repl = t->budget;
-		t->budget = 0;
+		//t->budget = 0;
 		
 		if (repl) {
 			struct cos_aep_info *aep = sl_thd_aep(t);
@@ -331,6 +326,13 @@ sl_cs_exit_schedule_nospin(void)
 		sltok = __sync_add_and_fetch(&globals->sched_tok, 1);
 //		sltok = globals->sched_tok;
 		sl_print(" K:%llu ", sltok);
+	//	if (budget) {
+	//		sl_print("A5\n");
+	//		if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
+	//	} else {
+	//		sl_print("A4\n");
+	//		cos_asnd(t->sndcap, 1);
+	//	}
 	}
 
 	sl_cs_exit();

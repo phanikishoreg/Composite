@@ -31,7 +31,8 @@ __sl_timeout_mod_wakeup(cycles_t now)
 		th = heap_highest(hs);
 		assert(th && th == tp);
 		th->wakeup_idx = -1;
-		sl_thd_wakeup_cs(th);
+		if (th->type == SL_THD_SIMPLE || th->type == SL_THD_CHILD_NOSCHED) sl_thd_wakeup_cs(th);
+		else                                                               sl_mod_wakeup(sl_mod_thd_policy_get(th));
 	} while (heap_size(hs));
 }
 
@@ -39,11 +40,17 @@ void
 sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
 {
 	cycles_t now;
+	sl_print("%u", t->thdid);
 
-	assert(t && t->wakeup_idx == -1); /* valid thread and not already in heap */
+	assert(t);
+//	assert(t->wakeup_idx == -1); /* valid thread and not already in heap */
+	if (t->wakeup_idx != -1) return;
 	assert(heap_size(hs) < SL_TIMEOUT_MOD_MAX_THDS); /* heap full! */
 
 	if (!(t->period)) assert(!implicit);
+
+	/* AEPs are woken up not by timeout module but by some other thread/interrupt */
+	if (t->type == SL_THD_AEP || t->type == SL_THD_AEP_TCAP) return;
 
 	rdtscll(now);
 	if (implicit) {	

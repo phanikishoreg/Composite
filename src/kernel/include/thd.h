@@ -176,9 +176,21 @@ thd_rcvcap_init(struct thread *t)
 	rc->rcvcap_thd_notif = NULL;
 }
 
+static int
+thd_rcvcap_pending(struct thread *t)
+{
+	if (t->rcvcap.pending) return t->rcvcap.pending;
+	return (list_first(&t->event_head) != NULL);
+}
+
 static inline void
 thd_rcvcap_evt_enqueue(struct thread *head, struct thread *t)
-{ if (list_empty(&t->event_list) && head != t) list_enqueue(&head->event_head, &t->event_list); }
+{
+	if (list_empty(&t->event_list) && head != t) {
+//		printk(" #%u^%u:%d:%d# ", head->tid, t->tid, (t->state & THD_STATE_RCVING ? 1 : 0), thd_rcvcap_pending(t));
+		list_enqueue(&head->event_head, &t->event_list);
+	}
+}
 
 static inline void
 thd_list_rem(struct thread *head, struct thread *t) { list_rem(&t->event_list); }
@@ -193,13 +205,6 @@ thd_rcvcap_evt_dequeue(struct thread *head) { return list_dequeue(&head->event_h
  */
 static inline int
 thd_track_exec(struct thread *t) { return !list_empty(&t->event_list); }
-
-static int
-thd_rcvcap_pending(struct thread *t)
-{
-	if (t->rcvcap.pending) return t->rcvcap.pending;
-	return (list_first(&t->event_head) != NULL);
-}
 
 static void 
 thd_rcvcap_isflushall_set(struct thread *t, int val)
@@ -256,6 +261,7 @@ thd_state_evt_deliver(struct thread *t, unsigned long *thd_state, unsigned long 
 	*thd_state = e->tid | (e->state & THD_STATE_RCVING ? (thd_rcvcap_pending(e) ? 0 : 1<<31) : 0);
 	*cycles    = e->exec;
 	e->exec    = 0;
+//	printk(" D:%u:%d ", (*thd_state<<1)>>1, *thd_state>>31);
 
 	return 1;
 }
