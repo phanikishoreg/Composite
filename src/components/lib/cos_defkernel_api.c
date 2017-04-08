@@ -178,6 +178,29 @@ cos_defswitch_aep(struct cos_aep_info *aep, tcap_prio_t p, tcap_time_t r, sched_
 }
 
 int
+cos_hithd_defswitch(thdcap_t c, tcap_prio_t p, tcap_time_t r, sched_tok_t stok, tcap_prio_t hip)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+
+	assert(curr_defci_init_status == INITIALIZED);
+
+	return cos_hithd_switch(c, sched_aep->tc, p, r, sched_aep->rcv, stok, sched_aep->tc, hip);
+}
+
+int
+cos_hithd_defswitch_aep(struct cos_aep_info *aep, tcap_prio_t p, tcap_time_t r, sched_tok_t stok, tcap_t hitc, tcap_prio_t hip)
+{
+	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();
+	struct cos_aep_info    *sched_aep = cos_sched_aep_get(defci);
+
+	assert(curr_defci_init_status == INITIALIZED);
+	assert(aep && aep->thd && aep->tc);
+
+	return cos_hithd_switch(aep->thd, aep->tc, p, r, sched_aep->rcv, stok, hitc, hip);
+}
+
+int
 cos_deftransfer(arcvcap_t rc, tcap_res_t res, tcap_prio_t p)
 {
 	struct cos_defcompinfo *defci     = cos_defcompinfo_curr_get();

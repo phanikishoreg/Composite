@@ -19,22 +19,33 @@ __sl_timeout_mod_wakeup(cycles_t now)
 {
 	if (!heap_size(hs)) return;
 
+	int idx = 1;
 	do {
 		struct sl_thd *tp, *th;
 
-		tp = heap_peek(hs);
+		//printc("$ %d %d, ", heap_size(hs), idx);
+		tp = heap_peek_at(hs, idx);
 		assert(tp);
+		idx ++;
 
-		if (tp->wakeup_cycs > now) break;
+		if (idx >= heap_size(hs)) break;
+		if (tp->wakeup_cycs > now) continue;
 		sl_print("T:%u ", tp->thdid);
 
-		th = heap_highest(hs);
+		idx --;
+		//printc("# %d %d, ", heap_size(hs), idx);
+		th = heap_remove(hs, idx);
 		assert(th && th == tp);
 		th->wakeup_idx = -1;
+		assert(th->type != SL_THD_AEP && th->type != SL_THD_AEP_TCAP);
 		if (th->type == SL_THD_SIMPLE || th->type == SL_THD_CHILD_NOSCHED) sl_thd_wakeup_cs(th);
 		else                                                               sl_mod_wakeup(sl_mod_thd_policy_get(th));
 	} while (heap_size(hs));
 }
+
+static struct sl_thd * 
+__sl_timeout_mod_block_peek(void)
+{ return heap_peek(hs); }
 
 void
 sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
@@ -43,7 +54,7 @@ sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
 	sl_print("%u", t->thdid);
 
 	assert(t);
-//	assert(t->wakeup_idx == -1); /* valid thread and not already in heap */
+	//assert(t->wakeup_idx == -1); /* valid thread and not already in heap */
 	if (t->wakeup_idx != -1) return;
 	assert(heap_size(hs) < SL_TIMEOUT_MOD_MAX_THDS); /* heap full! */
 
@@ -66,6 +77,10 @@ sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
 	heap_add(hs, t);
 }
 
+struct sl_thd *
+sl_timeout_mod_block_peek(void)
+{ return __sl_timeout_mod_block_peek(); }
+
 void
 sl_timeout_mod_expended(microsec_t now, microsec_t oldtimeout)
 {
@@ -83,7 +98,14 @@ sl_timeout_mod_expended(microsec_t now, microsec_t oldtimeout)
 
 static int
 __compare_min(void *a, void *b)
-{ return ((struct sl_thd *)a)->wakeup_cycs <= ((struct sl_thd *)b)->wakeup_cycs; }
+{
+	struct sl_thd *ta = (struct sl_thd *)a;
+	struct sl_thd *tb = (struct sl_thd *)b;
+
+	if ((ta->prio <= tb->prio) && (ta->wakeup_cycs <= tb->wakeup_cycs)) return 1;
+	return 0;
+//	return ((struct sl_thd *)a)->wakeup_cycs <= ((struct sl_thd *)b)->wakeup_cycs;
+}
 
 static void
 __update_idx(void *e, int pos)

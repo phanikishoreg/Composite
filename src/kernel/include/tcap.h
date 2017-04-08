@@ -213,8 +213,11 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, struct
 	/* next == INF? no timer required. */
 	left        = tcap_left(next);
 	if (timeout == TCAP_TIME_NIL && TCAP_RES_IS_INF(left)) {
-		cos_info->next_timer = 0;
-		chal_timer_disable();
+		if (cos_info->next_timer) {
+			printk("F");
+			cos_info->next_timer = 0;
+			chal_timer_disable();
+		}
 		return;
 	} 
 

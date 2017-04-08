@@ -616,7 +616,7 @@ intr_thd(void *d)
 	while (1) {
 		cos_rcv(e->rc, 0, NULL);
 		seq_order_check(e);
-		cos_thd_wakeup(w->tc, w->tcc, w->prio, wakeup_budget_test ? TEST_WAKEUP_BUDGET : 0);
+		cos_thd_wakeup(w->tc, w->tcc, w->prio, wakeup_budget_test ? TEST_WAKEUP_BUDGET : TCAP_RES_INF);
 	}
 }
 

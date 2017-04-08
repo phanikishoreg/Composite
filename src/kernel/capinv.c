@@ -578,8 +578,25 @@ asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
 	next = notify_process(rcv_thd, thd, rcv_tcap, tcap, tcap_next, yield);
 
 	if (!yield) {
-		if (next == thd) tcap_wakeup(rcv_tcap, tcap_sched_info(rcv_tcap)->prio, 0, rcv_thd, cos_info);
-		else             thd_next_thdinfo_update(cos_info, thd, tcap, tcap_sched_info(tcap)->prio, 0);
+		if (next == thd) {
+			tcap_wakeup(rcv_tcap, tcap_sched_info(rcv_tcap)->prio, TCAP_RES_INF, rcv_thd, cos_info);
+		} else {
+			tcap_res_t budget = TCAP_RES_INF;
+
+			if (cos_info->next_timer && rcv_tcap != tcap) {
+				cycles_t now;
+
+				rdtscll(now);
+				if (now < cos_info->next_timer) {
+					printk("Y");
+					budget = cos_info->next_timer - now;
+				} else {
+					budget = 0;
+					printk("V");
+				}
+			}
+			thd_next_thdinfo_update(cos_info, thd, tcap, tcap_sched_info(tcap)->prio, budget);
+		}
 	} else thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 
 	return next;
@@ -672,6 +689,7 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 		assert(usr_counter < ~0U);
 		if (thd_rcvcap_get_counter(rcvt) > usr_counter)	return -EAGAIN;
 		thd_rcvcap_set_counter(rcvt, usr_counter);
+		thd_rcvcap_next_timeout_set(rcvt, timeout);
 		if (thd_rcvcap_pending(rcvt) > 0) {
 			if (thd == rcvt) return -EBUSY;
 			next = rcvt;
@@ -679,6 +697,7 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 			tc      = 0;
 			timeout = TCAP_TIME_NIL;
 			sched   = NULL;
+			thd_rcvcap_next_tcap_set(rcvt, 0, 0, 0);
 		}
 	}
 
@@ -742,10 +761,12 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 	int curr_cpu = get_cpuid();
 	struct cap_arcv *arcv;
 	struct cos_cpu_local_info *cos_info;
-	struct thread *rcv_thd, *next, *thd;
-	struct tcap *rcv_tcap, *tcap, *tcap_next;
+	struct thread *rcv_thd, *next, *thd, *cursch;
+	struct tcap *rcv_tcap, *tcap, *tcap_next, *ntc;
 	struct comp_info *ci;
 	unsigned long ip, sp;
+	tcap_time_t timeout = TCAP_TIME_NIL, nto;
+	tcap_prio_t ntp;
 
 	if (!CAP_TYPECHK(asnd, CAP_ASND)) return 1;
 	assert(asnd->arcv_capid);
@@ -775,8 +796,28 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 	if (next == thd) return 1;
 	thd->state |= THD_STATE_PREEMPTED;
 
+	cursch = tcap_rcvcap_thd(tcap);
+	ntc = thd_rcvcap_next_tcap(cursch);
+	if (ntc && ntc != tcap_next) {
+		int ret;
+		tcap_prio_t tmpprio = tcap_sched_info(ntc)->prio;
+
+		printk("H");
+		nto = thd_rcvcap_next_timeout(cursch);
+		ntp = thd_rcvcap_next_tcap_prio(cursch);
+
+		tcap_setprio(ntc, ntp);
+		ret = tcap_higher_prio(ntc, tcap_next);
+		tcap_setprio(ntc, tmpprio);
+
+		if (ret) {
+			printk("l");
+			timeout = ntp;
+		}
+	}
+
 	print_this = 1;
-	return cap_switch(regs, thd, next, tcap_next, TCAP_TIME_NIL, NULL, ci, cos_info);
+	return cap_switch(regs, thd, next, tcap_next, timeout, NULL, ci, cos_info);
 }
 
 int
@@ -834,6 +875,35 @@ timer_process(struct pt_regs *regs)
 }
 
 static int
+cap_arcv_schedop(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
+		 struct comp_info *ci, struct cos_cpu_local_info *cos_info)
+{
+	struct thread *rcvt;
+	struct cap_tcap *tcap_cap;
+	struct tcap *next_tcap;
+	capid_t nxt_tc       = __userregs_get1(regs);
+	tcap_prio_t nxt_prio = __userregs_get2(regs);
+	sched_tok_t tok      = __userregs_get3(regs);
+	tcap_time_t timeout  = __userregs_get4(regs);
+
+	if (unlikely(arcv->cpuid != get_cpuid())) return -EINVAL;
+
+	rcvt = arcv->thd;
+	assert(tok < ~0U);
+	if (thd_rcvcap_get_counter(rcvt) > tok)	return -EAGAIN;
+
+	tcap_cap = (struct cap_tcap *)captbl_lkup(ci->captbl, nxt_tc);
+	if (!CAP_TYPECHK_CORE(tcap_cap, CAP_TCAP)) return -EINVAL;
+	next_tcap = tcap_cap->tcap;
+	if (!tcap_rcvcap_thd(next_tcap)) return -EINVAL;
+
+	thd_rcvcap_next_tcap_set(rcvt, next_tcap, nxt_prio, timeout);
+
+	__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
+	return 0;
+}
+
+static int
 cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	    struct comp_info *ci, struct cos_cpu_local_info *cos_info)
 {
@@ -841,7 +911,10 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	struct tcap   *tc_next   = tcap_current(cos_info);
 	struct next_thdinfo *nti = &cos_info->next_ti;
 	tcap_time_t timeout      = TCAP_TIME_NIL;
-	rcv_flags_t rflags       = __userregs_getop(regs);
+	int op                   = __userregs_getop(regs);
+	rcv_flags_t rflags       = __userregs_get1(regs);
+
+	if (op == CAPTBL_OP_ARCV_HIPRIOTHD) return cap_arcv_schedop(arcv, thd, regs, ci, cos_info);
 
 	if (unlikely(arcv->thd != thd || arcv->cpuid != get_cpuid())) return -EINVAL;
 
@@ -872,14 +945,21 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	if (nti->thd) {
 		assert(nti->tc);
 
+		printk("Z");
 		next = nti->thd;
 		tc_next = nti->tc;
 		tcap_setprio(nti->tc, nti->prio);
 		if (nti->budget) {
+			printk("z");
 			/* convert budget to timeout */
-			cycles_t now;
-			rdtscll(now);
-			timeout = tcap_cyc2time(now + nti->budget);
+			if (!TCAP_RES_IS_INF(nti->budget)) {
+				cycles_t now;
+				rdtscll(now);
+				timeout = tcap_cyc2time(now + nti->budget);
+			}
+		} else {
+			printk("D");
+			next = tcap_rcvcap_thd(nti->tc);
 		}
 		thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 

@@ -37,12 +37,16 @@ struct rcvcap_info {
 	sched_tok_t sched_count;
 	struct tcap   *rcvcap_tcap;      /* This rcvcap's tcap */
 	struct thread *rcvcap_thd_notif; /* The parent rcvcap thread for notifications */
+
+	/* to set timeouts correctly with current or activating thd */
+	struct tcap   *nxt_tc;
+	tcap_prio_t    nxt_prio;
+	tcap_time_t    nxt_timeout;
 };
 
 typedef enum {
 	THD_STATE_PREEMPTED   = 1,
 	THD_STATE_RCVING      = 1<<1, /* report to parent rcvcap that we're receiving */
-	THD_STATE_SUSPENDED   = 1<<2,
 } thd_state_t;
 
 /**
@@ -174,7 +178,38 @@ thd_rcvcap_init(struct thread *t)
 	rc->isbound = rc->pending = rc->refcnt = rc->isflushall = 0;
 	rc->sched_count = 0;
 	rc->rcvcap_thd_notif = NULL;
+
+	rc->nxt_tc = NULL;
+	rc->nxt_prio = 0;
+	rc->nxt_timeout = 0;
 }
+
+static struct tcap *
+thd_rcvcap_next_tcap(struct thread *t)
+{ return t->rcvcap.nxt_tc; }
+
+static tcap_prio_t
+thd_rcvcap_next_tcap_prio(struct thread *t)
+{
+	assert(t->rcvcap.nxt_tc);
+	return t->rcvcap.nxt_prio;
+}
+
+static tcap_time_t
+thd_rcvcap_next_timeout(struct thread *t)
+{ return t->rcvcap.nxt_timeout; }
+
+static void
+thd_rcvcap_next_tcap_set(struct thread *t, struct tcap *ntc, tcap_prio_t prio, tcap_time_t timeout)
+{
+	t->rcvcap.nxt_tc = ntc;
+	t->rcvcap.nxt_prio = prio;
+	t->rcvcap.nxt_timeout = timeout;
+}
+
+static void
+thd_rcvcap_next_timeout_set(struct thread *t, tcap_time_t to)
+{ t->rcvcap.nxt_timeout = to; }
 
 static int
 thd_rcvcap_pending(struct thread *t)

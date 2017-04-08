@@ -229,6 +229,16 @@ heap_peek(struct heap *h)
 	return h->data[1];
 }
 
+void *
+heap_peek_at(struct heap *h, int c)
+{
+	if (h->e == 1) return NULL;
+	assert(!heap_verify(h));
+	debug("heap_peek_at: (%p,%d) %p@%d\n", h, h->e, h->data[c], c);
+	assert(heap_size(h)>=c);
+	return h->data[c];
+}
+
 void
 heap_adjust(struct heap *h, int c)
 {

@@ -20,6 +20,7 @@ void *heap_remove(struct heap *h, int c);
 void *heap_highest(struct heap *h);
 /* return but don't remove the highest value */
 void *heap_peek(struct heap *h);
+void *heap_peek_at(struct heap *h, int c);
 int heap_add(struct heap *h, void *new);
 void heap_destroy(struct heap *h);
 struct heap *heap_alloc(int max_sz, cmp_fn_t c, update_fn_t u);

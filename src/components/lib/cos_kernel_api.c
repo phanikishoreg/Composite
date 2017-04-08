@@ -675,6 +675,15 @@ cos_switch(thdcap_t c, tcap_t tc, tcap_prio_t prio, tcap_time_t timeout, arcvcap
 { return call_cap_op(c, (stok >> 16), tc << 16 | rcv, (prio << 32) >> 32, ((prio << 16) >> 32) | ((stok << 16) >> 16), timeout); }
 
 int
+cos_hithd_switch(thdcap_t c, tcap_t tc, tcap_prio_t prio, tcap_time_t timeout, arcvcap_t rcv, sched_tok_t stok, tcap_t hitc, tcap_prio_t hiprio)
+{
+	int ret;
+
+	if (hitc && (ret = call_cap_op(rcv, CAPTBL_OP_ARCV_HIPRIOTHD, hitc, hiprio, stok, timeout))) return ret;
+	return call_cap_op(c, (stok >> 16), tc << 16 | rcv, (prio << 32) >> 32, ((prio << 16) >> 32) | ((stok << 16) >> 16), timeout);
+}
+
+int
 cos_asnd(asndcap_t snd, int yield)
 { return call_cap_op(snd, 0, yield, 0, 0, 0); }
 
@@ -685,7 +694,7 @@ cos_sched_rcv(arcvcap_t rcv, rcv_flags_t flags, int *rcvd, thdid_t *thdid, int *
 	unsigned long cyc       = 0;
 	int           ret;
 
-	ret      = call_cap_retvals_asm(rcv, flags, 0, 0, 0, 0, &thd_state, &cyc);
+	ret      = call_cap_retvals_asm(rcv, 0, flags, 0, 0, 0, &thd_state, &cyc);
 
 	*blocked = (int)(thd_state >> (sizeof(thd_state)*8-1));
 	*thdid   = (thdid_t)(thd_state & ((1 << (sizeof(thdid_t)*8))-1));

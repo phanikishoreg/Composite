@@ -182,7 +182,7 @@ sl_now(void)
 { return ps_tsc(); }
 
 static inline int
-sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_tok_t sltok)
+sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_tok_t sltok, tcap_t hitc, tcap_prio_t hiprio)
 {
         struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
         struct cos_compinfo    *ci  = &dci->ci;
@@ -201,7 +201,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 		assert(aep->tc);
 
 		sl_print("A*\n");
-		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
+		return cos_hithd_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok, hitc, hiprio);
 	}
 	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
 	{
@@ -209,7 +209,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 		t->budget = 0;
 		sl_print("A2\n");
 
-		return cos_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok);
+		return cos_hithd_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok, hitc, hiprio);
 	}
 	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
 	{
@@ -279,7 +279,7 @@ sl_cs_exit_schedule_nospin(void)
         struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
         struct cos_compinfo    *ci  = &dci->ci;
 	struct sl_thd_policy   *pt;
-	struct sl_thd          *t;
+	struct sl_thd          *t, *ht;
 	struct sl_global       *globals = sl__globals();
 	sched_tok_t    tok;
 	cycles_t       now;
@@ -287,6 +287,8 @@ sl_cs_exit_schedule_nospin(void)
 	int            ret;
 	tcap_res_t     budget = 0, repl = 0;
 	sl_sched_tok_t sltok = 0;
+	tcap_t         hitc = 0;
+	tcap_prio_t    hiprio = 0;
 
 	if (unlikely(!sl_cs_owner()) && (ret = sl_cs_enter_nospin())) return ret;
 
@@ -334,10 +336,15 @@ sl_cs_exit_schedule_nospin(void)
 	//		cos_asnd(t->sndcap, 1);
 	//	}
 	}
+	ht = sl_timeout_mod_block_peek();
+	if (ht) {
+		hitc = sl_thd_aep(ht)->tc;
+		hiprio = ht->prio;
+	}
 
 	sl_cs_exit();
 
-	return sl_thd_activate(t, tok, budget, sltok);
+	return sl_thd_activate(t, tok, budget, sltok, hitc, hiprio);
 }
 
 static inline void
