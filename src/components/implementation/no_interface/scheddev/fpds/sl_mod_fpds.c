@@ -88,6 +88,7 @@ sl_mod_block(struct sl_thd_policy *t)
 void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
+	struct sl_thd *th = sl_mod_thd_get(t);
 	sl_print("W%u", sl_mod_thd_get(t)->thdid);
 	/*
 	 * TODO:
@@ -96,6 +97,7 @@ sl_mod_wakeup(struct sl_thd_policy *t)
 	 * 2. expending tcap-budget, will get a unblocked (not really that) event to the sched.
 	 */
 	sl_mod_yield(t, NULL);
+	if (th->type == SL_THD_AEP || th->type == SL_THD_AEP_TCAP) sl_timeout_mod_wakeup(th);
 }
 
 void

@@ -70,11 +70,13 @@ sl_mod_block(struct sl_thd_policy *t)
 void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
+	struct sl_thd *th = sl_mod_thd_get(t);
 	//assert(t->prio_idx < 0);
 	if (t->prio_idx >= 0) return;
 
 	heap_add(hs, t);
 	debug("wakeup= add idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+        if (th->type == SL_THD_AEP || th->type == SL_THD_AEP_TCAP) sl_timeout_mod_wakeup(th);
 }
 
 void

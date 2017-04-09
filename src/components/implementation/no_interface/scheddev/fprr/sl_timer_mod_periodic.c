@@ -15,7 +15,7 @@ struct wakeup_heap {
 static struct heap *hs = (struct heap *)&wakeup_heap;
 
 static void
-__sl_timeout_mod_wakeup(cycles_t now)
+__sl_timeout_mod_wakeup_expired(cycles_t now)
 {
 	if (!heap_size(hs)) return;
 
@@ -30,6 +30,8 @@ __sl_timeout_mod_wakeup(cycles_t now)
 
 		if (idx >= heap_size(hs)) break;
 		if (tp->wakeup_cycs > now) continue;
+		/* AEP threads are explicitly woken up by wakeup scheduling events.. */
+		if (tp->type == SL_THD_AEP || tp->type == SL_THD_AEP_TCAP) continue;
 		sl_print("T:%u ", tp->thdid);
 
 		idx --;
@@ -60,9 +62,6 @@ sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
 
 	if (!(t->period)) assert(!implicit);
 
-	/* AEPs are woken up not by timeout module but by some other thread/interrupt */
-	if (t->type == SL_THD_AEP || t->type == SL_THD_AEP_TCAP) return;
-
 	rdtscll(now);
 	if (implicit) {	
 		t->wakeup_cycs += t->period; /* implicit wakeups! update to next period */
@@ -75,6 +74,16 @@ sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs)
 	}
 
 	heap_add(hs, t);
+}
+
+void
+sl_timeout_mod_wakeup(struct sl_thd *t)
+{
+	assert(heap_size(hs)); 
+	if (t->wakeup_idx <= 0) return;
+
+	assert(t->type == SL_THD_AEP_TCAP || t->type == SL_THD_AEP);
+	heap_remove(hs, t->wakeup_idx);
 }
 
 struct sl_thd *
@@ -93,7 +102,7 @@ sl_timeout_mod_expended(microsec_t now, microsec_t oldtimeout)
 	sl_timeout_oneshot(now + sl_timeout_period_get() - offset);
 
 	/* wakeup any blocked threads! */
-	__sl_timeout_mod_wakeup(now);
+	__sl_timeout_mod_wakeup_expired(now);
 }
 
 static int

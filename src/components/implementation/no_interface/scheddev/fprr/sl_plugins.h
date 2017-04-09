@@ -51,5 +51,6 @@ void sl_timeout_mod_init(void);
 /* API for waking up threads using timer management module */
 void sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs);
 struct sl_thd *sl_timeout_mod_block_peek(void);
+void sl_timeout_mod_wakeup(struct sl_thd *t);
 
 #endif	/* SL_PLUGINS_H */
