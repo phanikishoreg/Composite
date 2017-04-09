@@ -7,8 +7,9 @@
 struct sl_thd_policy {
 	struct sl_thd  thd;
 	tcap_prio_t    priority;
-	microsec_t     period_usec;
-	cycles_t       period, deadline;
+	microsec_t     period_usec, budget_usec;
+	cycles_t       period, deadline, last_period;
+	tcap_res_t     budget, expended;
 
 	int            prio_idx;
 };

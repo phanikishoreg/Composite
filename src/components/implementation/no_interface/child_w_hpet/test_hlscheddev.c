@@ -98,7 +98,7 @@ cos_init(void)
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
 	struct sl_thd          *threads[N_TESTTHDS];
-	union sched_param       sp    = {.c = {.type = SCHEDP_WINDOW, .value = 0}};
+	union sched_param       sp;
 
 //	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
@@ -107,13 +107,24 @@ cos_init(void)
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
 		if (i == HPETAEP_THD) {
-			threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, BOOT_CAPTBL_SELF_INITTCAP_BASE);
+			threads[i] = sl_aepthd_alloc(test_hpetaep_fn, (void *)i);
+			assert(threads[i]);
+
+			sp.c.type  = SCHEDP_WINDOW;
+			sp.c.value = T_array[i];
+			sl_thd_param_set(threads[i], sp.v);
+			
+			sp.c.type  = SCHEDP_BUDGET;
+			sp.c.value = C_array[i];
+			sl_thd_param_set(threads[i], sp.v);
 		} else {
 			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
+			assert(threads[i]);
+
+			sp.c.type  = SCHEDP_WINDOW;
+			sp.c.value = T_array[i];
+			sl_thd_param_set(threads[i], sp.v);
 		}
-		assert(threads[i]);
-		sp.c.value = T_array[i];
-		sl_thd_param_set(threads[i], sp.v);
 	}
 
 	sl_sched_loop();

@@ -18,7 +18,7 @@
 
 #define COS_DEFAULT_RET_CAP 0
 
-static int print_this;
+static int print_this = 1;
 /*
  * TODO: switch to a dedicated TLB flush thread (in a separate
  * protection domain) to do this.
@@ -448,7 +448,7 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 
 	if (unlikely(curr == next)) {
 		if(print_this) {
-			print_this = 0;
+		//	print_this = 0;
 			printk(" %u^%u ", curr->tid, next->tid);
 		}
 		assert(!(curr->state & THD_STATE_RCVING));
@@ -509,7 +509,7 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 	copy_all_regs(&next->regs, regs);
 
 	if(print_this) {
-		print_this = 0;
+	//	print_this = 0;
 		printk(" %u^%u ", curr->tid, next->tid);
 	}
 //	printk(" %u^%u ", curr->tid, next->tid);
@@ -588,11 +588,9 @@ asnd_process(struct thread *rcv_thd, struct thread *thd, struct tcap *rcv_tcap,
 
 				rdtscll(now);
 				if (now < cos_info->next_timer) {
-					printk("Y");
 					budget = cos_info->next_timer - now;
 				} else {
 					budget = 0;
-					printk("V");
 				}
 			}
 			thd_next_thdinfo_update(cos_info, thd, tcap, tcap_sched_info(tcap)->prio, budget);
@@ -802,7 +800,6 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 		int ret;
 		tcap_prio_t tmpprio = tcap_sched_info(ntc)->prio;
 
-		printk("H");
 		nto = thd_rcvcap_next_timeout(cursch);
 		ntp = thd_rcvcap_next_tcap_prio(cursch);
 
@@ -811,7 +808,6 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 		tcap_setprio(ntc, tmpprio);
 
 		if (ret) {
-			printk("l");
 			timeout = ntp;
 		}
 	}
@@ -916,6 +912,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 
 	if (op == CAPTBL_OP_ARCV_HIPRIOTHD) return cap_arcv_schedop(arcv, thd, regs, ci, cos_info);
 
+//	printk(" r:%u ", thd->tid);
 	if (unlikely(arcv->thd != thd || arcv->cpuid != get_cpuid())) return -EINVAL;
 
 	/* deliver pending notifications? */
@@ -941,16 +938,16 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 
 	next = notify_parent(thd);
 //	printk("%%");
-	/* if preempted/awoken thread is waiting, switch to that */
-	if (nti->thd) {
+	/*
+	 * if preempted/awoken thread is waiting, switch to that.
+	 */
+	if (nti->thd && nti->thd != thd) {
 		assert(nti->tc);
 
-		printk("Z");
 		next = nti->thd;
 		tc_next = nti->tc;
 		tcap_setprio(nti->tc, nti->prio);
 		if (nti->budget) {
-			printk("z");
 			/* convert budget to timeout */
 			if (!TCAP_RES_IS_INF(nti->budget)) {
 				cycles_t now;
@@ -958,13 +955,12 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 				timeout = tcap_cyc2time(now + nti->budget);
 			}
 		} else {
-			printk("D");
 			next = tcap_rcvcap_thd(nti->tc);
 		}
-		thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 
 	//	printk(" [%u:%u] ", thd->tid, next->tid);
 	}
+	thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 
 	/* FIXME:  for now, lets just ignore this path...need to plumb tcaps into it */
 	thd->interrupted_thread = NULL;

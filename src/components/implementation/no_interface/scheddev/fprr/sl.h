@@ -205,8 +205,6 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 	}
 	case SL_THD_AEP_TCAP: /* Transfer budget if it needs replenisment! */
 	{
-		if (budget && cos_deftransfer_aep(aep, budget, t->prio)) assert(0);
-		t->budget = 0;
 		sl_print("A2\n");
 
 		return cos_hithd_defswitch_aep(aep, t->prio, sl__globals()->timeout_next, tok, hitc, hiprio);
@@ -335,6 +333,12 @@ sl_cs_exit_schedule_nospin(void)
 	//		sl_print("A4\n");
 	//		cos_asnd(t->sndcap, 1);
 	//	}
+	} else if (t->type == SL_THD_AEP_TCAP) {
+		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
+
+		if (pbudget < budget) budget = pbudget;
+		if (budget && cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) ;
+		else t->budget -= budget;
 	}
 	ht = sl_timeout_mod_block_peek();
 	if (ht) {

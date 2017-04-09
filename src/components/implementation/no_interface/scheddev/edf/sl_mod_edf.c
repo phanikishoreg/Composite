@@ -26,17 +26,34 @@ static struct heap *hs = (struct heap *)&edf_heap;
 
 void
 sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
-{ }
+{
+	if (!cycles) return;
+
+	if (t->budget) {
+		assert(cycles < (cycles_t)TCAP_RES_MAX);
+		t->expended += (tcap_res_t)cycles;
+	}
+}
 
 struct sl_thd_policy *
 sl_mod_schedule(void)
 {
 	int i;
+	cycles_t now;
 	struct sl_thd_policy *t;
+	struct sl_thd *td;
 
+	rdtscll(now);
 	assert(heap_size(hs));
 	t = heap_peek(hs);
 	debug("schedule= peek idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+
+	td = sl_mod_thd_get(t);
+	if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
+		t->last_period = now;
+		td->budget    += t->budget;
+		t->expended    = 0;
+	}
 
 	return t;
 }
@@ -90,6 +107,9 @@ sl_mod_thd_create(struct sl_thd_policy *t)
 	t->period_usec = 0;
 	t->priority    = t->deadline = ~(cycles_t)0;
 	t->prio_idx    = -1;
+	t->last_period = 0;
+	t->budget_usec = 0;
+	t->budget      = 0;
 	
 	assert((heap_size(hs)+1) < SL_EDF_MAX_THDS);
 	heap_add(hs, t);
@@ -105,25 +125,30 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 {
 	cycles_t now;
 
-	assert(type == SCHEDP_WINDOW);
-	t->period_usec = v;
-	t->period = sl_usec2cyc(t->period_usec);
+	assert(type == SCHEDP_WINDOW || type == SCHEDP_BUDGET);
+	if (type == SCHEDP_WINDOW) {
+		t->period_usec = v;
+		t->period = sl_usec2cyc(t->period_usec);
 
-	/* first deadline. */
-	rdtscll(now);
-	t->deadline = now + t->period;
+		/* first deadline. */
+		rdtscll(now);
+		t->deadline = now + t->period;
 #ifdef SL_DEBUG_DEADLINES
-	prev = now;
+		prev = now;
 #endif
-	/*
-	 * TODO: 1. tcap_prio_t=48bit! mapping 64bit value to 48bit value.
-	 *          (or, can we make cos_switch/cos_tcap_delegate support prio=64bits?).
-	 *       2. wraparound (64bit or 48bit) logic for deadline-based-heap!
-	 */
-	t->priority = t->deadline;
-	assert(t->priority <= SL_EDF_DL_LOW);
-	heap_adjust(hs, t->prio_idx);
-	debug("param_set= adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+		/*
+		 * TODO: 1. tcap_prio_t=48bit! mapping 64bit value to 48bit value.
+		 *          (or, can we make cos_switch/cos_tcap_delegate support prio=64bits?).
+		 *       2. wraparound (64bit or 48bit) logic for deadline-based-heap!
+		 */
+		t->priority = t->deadline;
+		assert(t->priority <= SL_EDF_DL_LOW);
+		heap_adjust(hs, t->prio_idx);
+		debug("param_set= adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
+	} else if (type == SCHEDP_BUDGET) {
+		t->budget_usec = v;
+		t->budget = sl_usec2cyc(t->budget_usec);
+	}
 }
 
 static int

@@ -54,7 +54,7 @@ sl_mod_schedule(void)
 		/* if this thread is using DS budget server and we have reached/passed replenishment period */
 		if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
 			t->last_period = now;
-			td->budget     = t->budget;
+			td->budget    += t->budget;
 			t->expended    = 0;
 		}
 
