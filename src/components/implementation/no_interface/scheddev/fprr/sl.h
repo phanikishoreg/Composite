@@ -427,6 +427,7 @@ struct sl_thd *sl_thd_alloc(cos_thd_fn_t fn, void *data);
  * TODO: we might need to create a sndcap to comp->sched_aep->sched_rcv!
  */
 struct sl_thd *sl_thd_comp_init(struct cos_defcompinfo *comp);
+struct sl_thd *sl_aepthd_init(thdcap_t, arcvcap_t rcv);
 /*
  * TODO: free only if alloc'd. 
  *       free sndcap of child-sched

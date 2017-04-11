@@ -235,6 +235,37 @@ done:
 	return t;
 }
 
+static struct sl_thd *
+sl_aepthd_init_intern(thdcap_t thd, tcap_t tc, arcvcap_t rcv)
+{
+	struct cos_defcompinfo *dci = cos_defcompinfo_curr_get();
+	struct cos_compinfo    *ci  = &dci->ci;
+	struct sl_thd          *t   = NULL;
+	struct cos_aep_info    *aep = NULL;
+	thdid_t   tid;
+	int       ret;
+
+	aep = sl_aep_alloc();
+	if (!aep) goto done;
+
+	aep->thd = thd;
+	aep->tc = tc;
+	aep->rcv = rcv;
+
+	tid = cos_introspect(ci, aep->thd, THD_GET_TID);
+	assert(tid);
+
+	t = sl_thd_alloc_init(tid, aep, 0, SL_THD_AEP);
+	sl_mod_thd_create(sl_mod_thd_policy_get(t));
+
+done:
+	return t;
+
+}
+
+struct sl_thd *
+sl_aepthd_init(thdcap_t thd, arcvcap_t rcv)
+{ return sl_aepthd_init_intern(thd, sl_thd_aep(sl__globals()->sched_thd)->tc, rcv); }
 
 struct sl_thd *
 sl_thd_alloc(cos_thd_fn_t fn, void *data)

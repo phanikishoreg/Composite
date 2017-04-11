@@ -183,7 +183,7 @@ periodic_handler(struct pt_regs *regs)
 	if (unlikely(timer_calibration_init)) timer_calibration();
 
 	ack_irq(HW_PERIODIC);
-	//printk("p");
+//	printk("p");
 //	if (!prev) rdtscll(prev);
 //	else {
 //		rdtscll(now);

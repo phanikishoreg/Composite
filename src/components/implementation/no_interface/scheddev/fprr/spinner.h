@@ -13,7 +13,7 @@ spin_usecs(microsec_t usecs)
 
 	cycs0 = cycs;
 	cycles_t exec_now = sl_exec_cycles(), exec_end, end_act;
-	exec_end += cycs;
+	exec_end = exec_now + cycs;
 	rdtscll(now);
 	cycs += now;
 
