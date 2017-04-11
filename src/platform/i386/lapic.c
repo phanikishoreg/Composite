@@ -179,6 +179,7 @@ lapic_timer_handler(struct pt_regs *regs)
 
 	lapic_ack();
 
+	//printk(" o ");
 	preempt = timer_process(regs);
 
 	return preempt;

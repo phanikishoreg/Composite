@@ -31,12 +31,18 @@ void
 test_thd_fn(void *data)
 {
 	thdid_t tid = cos_thdid();
+	cycles_t now, prev;
 
 	while (1) {
 		microsec_t workusecs = W_array[(int)data];
 
-	//	printc(" l=%u ", tid);
+		rdtscll(prev);
 		spin_usecs(workusecs);
+		rdtscll(now);
+
+//		if (now - prev > sl_usec2cyc(C_array[(int)data])) {
+//			printc(" l=%u ", tid);
+//		}
 
 		sl_thd_block(0);
 	}

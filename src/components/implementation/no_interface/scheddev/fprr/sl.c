@@ -329,6 +329,7 @@ void
 sl_sched_loop(void)
 {
 	arcvcap_t sched_rcv = sl_thd_aep(sl__globals()->sched_thd)->rcv;
+//	int iters = 10;
 
 	while (1) {
 		int pending, ret;
@@ -390,6 +391,8 @@ retry_rcv:
 
 			sl_print("h");
 		/* If switch returns an inconsistency, we retry anyway */
+//		iters --;
+//		if (iters <= 0) while (1);
 		sl_cs_exit_schedule_nospin();
 			sl_print("k");
 	}

@@ -61,18 +61,20 @@ sl_mod_schedule(void)
 void
 sl_mod_block(struct sl_thd_policy *t)
 {
+	if (t->prio_idx < 0) return;
 #ifdef SL_DEBUG_DEADLINES
 	cycles_t now;
+	static long print_counter = 0;
 
 	rdtscll(now);
 
 	if (now > t->deadline) dl_missed ++;
-	if (now - prev > sl_usec2cyc(SL_DEBUG_DL_MISS_DIAG_USEC)) {
+	if (now - prev > sl_usec2cyc(10 * SL_DEBUG_DL_MISS_DIAG_USEC)) {
 		prev = now;
-		sl_mod_print("\nH:%llu\n", dl_missed);
+		sl_mod_print(" %ld:C:%llu ", print_counter ++, dl_missed);
+		//sl_mod_print(" %ld:C%u:%llu ", print_counter ++, sl_mod_thd_get(t)->thdid, dl_missed);
 	}
 #endif
-	if (t->prio_idx < 0) return;
 
 	heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
@@ -123,7 +125,7 @@ sl_mod_thd_delete(struct sl_thd_policy *t)
 void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
-	cycles_t now;
+	static cycles_t now;
 
 	assert(type == SCHEDP_WINDOW || type == SCHEDP_BUDGET);
 	if (type == SCHEDP_WINDOW) {
@@ -131,7 +133,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		t->period = sl_usec2cyc(t->period_usec);
 
 		/* first deadline. */
-		rdtscll(now);
+		if (!now) rdtscll(now);
 		t->deadline = now + t->period;
 #ifdef SL_DEBUG_DEADLINES
 		prev = now;

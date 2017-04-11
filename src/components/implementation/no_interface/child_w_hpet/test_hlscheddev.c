@@ -49,12 +49,13 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
-#define N_TESTTHDS 4
+#define N_TOTALTHDS 5
+#define N_TESTTHDS (N_TOTALTHDS - 1)
 
 #define HPETAEP_THD (N_TESTTHDS - 1)
-microsec_t T_array[N_TESTTHDS] = { 1000, 1000, 1000, 1000};
-microsec_t C_array[N_TESTTHDS] = { 15, 30, 30, 10};
-microsec_t W_array[N_TESTTHDS] = { 10, 25, 25, 10}; /* actual spin work! not including printing, blocking overheads */
+microsec_t T_array[N_TOTALTHDS] = { 200, 200, 200, 200, 1000};
+microsec_t C_array[N_TOTALTHDS] = { 30, 60, 60, 20, 200};
+microsec_t W_array[N_TOTALTHDS] = { 25, 55, 50, 20, 190}; /* actual spin work! not including printing, blocking overheads */
 
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
@@ -80,14 +81,46 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 void
 test_thd_fn(void *data)
 {
+	cycles_t now, prev;
 	thdid_t tid = cos_thdid();
 
 	while (1) {
 		microsec_t workusecs = W_array[(int)data];
 	
-		//printc("h=%u", tid);
+		rdtscll(prev);
 		spin_usecs(workusecs);
+		rdtscll(now);
+
+//		if (now - prev > C_array[(int)data]) {
+//			printc("h=%u", tid);
+//		}
+
 		sl_thd_block(0);
+	}
+}
+
+void
+test_loop(void *data)
+{
+	thdid_t ctid = cos_thdid();
+	while (1) {
+		cycles_t now, prev;
+		cycles_t cycles;
+		thdid_t tid;
+		int pending, rcvd, blocked;
+		rcv_flags_t rf_use = 0;
+		microsec_t workusecs = W_array[(int)data];
+
+		pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf_use, &rcvd, &tid, &blocked, &cycles);
+	
+		rdtscll(prev);
+		spin_usecs(workusecs);
+		rdtscll(now);
+
+		if (now - prev > C_array[(int)data]) {
+			printc("h=%u", ctid);
+		}
+
 	}
 }
 
@@ -103,9 +136,14 @@ cos_init(void)
 //	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	cos_defcompinfo_init();
+
+
+//	i = 4;
+//	test_loop((void *)i);
+
 	sl_init();
 
-	for (i = 0 ; i < N_TESTTHDS ; i++) {
+	for (i = 0 ; i < N_TESTTHDS-1 ; i++) {
 		if (i == HPETAEP_THD) {
 			threads[i] = sl_aepthd_alloc(test_hpetaep_fn, (void *)i);
 			assert(threads[i]);

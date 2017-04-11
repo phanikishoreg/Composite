@@ -176,12 +176,22 @@ chal_cyc_usec(void)
 int
 periodic_handler(struct pt_regs *regs)
 {
+//	static cycles_t prev;
+//	cycles_t now;
 	int preempt = 1;
 
 	if (unlikely(timer_calibration_init)) timer_calibration();
 
 	ack_irq(HW_PERIODIC);
-	printk("p");
+	//printk("p");
+//	if (!prev) rdtscll(prev);
+//	else {
+//		rdtscll(now);
+//
+//		printk(" p:%llu ", now - prev);
+//		prev = now;
+//	}
+
 	preempt = cap_hw_asnd(&hw_asnd_caps[HW_PERIODIC], regs);
 	HPET_INT_ENABLE(TIMER_PERIODIC);
 

@@ -2,7 +2,7 @@ include Makefile.src
 
 CC := gcc -m32
 LD := ld -m elf_i386
-AS := as --32 -g
+AS := as --32 #-g
 
 INCPATH := ../../kernel/include
 INCS    := -I$(INCPATH)

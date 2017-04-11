@@ -17,8 +17,11 @@ static struct heap *hs = (struct heap *)&wakeup_heap;
 static void
 __sl_timeout_mod_wakeup_expired(cycles_t now)
 {
+	cycles_t nw;
 	if (!heap_size(hs)) return;
 
+	//rdtscll(nw);
+	nw = now;
 	int idx = 1;
 	do {
 		struct sl_thd *tp, *th;
@@ -29,11 +32,12 @@ __sl_timeout_mod_wakeup_expired(cycles_t now)
 		idx ++;
 
 		if (idx >= heap_size(hs)) break;
-		if (tp->wakeup_cycs > now) continue;
+		if (tp->wakeup_cycs > nw) continue;
 		/* AEP threads are explicitly woken up by wakeup scheduling events.. */
 		if (tp->type == SL_THD_AEP || tp->type == SL_THD_AEP_TCAP) continue;
 		sl_print("T:%u ", tp->thdid);
 
+//		printc(" W:%u:%llu:%llu:%llu ", tp->thdid, nw, tp->wakeup_cycs, nw - tp->wakeup_cycs);
 		idx --;
 		//printc("# %d %d, ", heap_size(hs), idx);
 		th = heap_remove(hs, idx);
@@ -86,6 +90,13 @@ sl_timeout_mod_wakeup(struct sl_thd *t)
 	heap_remove(hs, t->wakeup_idx);
 }
 
+void
+sl_timeout_mod_wakeup_expired(cycles_t now)
+{
+	/* wakeup any blocked threads! */
+	__sl_timeout_mod_wakeup_expired(now);
+}
+
 struct sl_thd *
 sl_timeout_mod_block_peek(void)
 { return __sl_timeout_mod_block_peek(); }
@@ -100,9 +111,6 @@ sl_timeout_mod_expended(microsec_t now, microsec_t oldtimeout)
 	/* in virtual environments, or with very small periods, we might miss more than one period */
 	offset = (now - oldtimeout) % sl_timeout_period_get();
 	sl_timeout_oneshot(now + sl_timeout_period_get() - offset);
-
-	/* wakeup any blocked threads! */
-	__sl_timeout_mod_wakeup_expired(now);
 }
 
 static int

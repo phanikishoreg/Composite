@@ -76,6 +76,47 @@ static inline struct sl_global *
 sl__globals(void)
 { return &sl_global_data; }
 
+static inline cycles_t
+sl_now(void)
+{ return ps_tsc(); }
+
+/*
+ * Time and timeout API.
+ *
+ * This can be used by the scheduler policy module *and* by the
+ * surrounding component code.  To avoid race conditions between
+ * reading the time, and setting a timeout, we avoid relative time
+ * measurements.  sl_now gives the current cycle count that is on an
+ * absolute timeline.  The periodic function sets a period that can be
+ * used when a timeout has happened, the relative function sets a
+ * timeout relative to now, and the oneshot timeout sets a timeout on
+ * the same absolute timeline as returned by sl_now.
+ */
+void sl_timeout_period(cycles_t period);
+
+static inline cycles_t
+sl_timeout_period_get(void)
+{ return sl__globals()->period; }
+
+static inline void
+sl_timeout_oneshot(cycles_t absolute_us)
+{
+	sl__globals()->timer_next   = absolute_us;
+	sl__globals()->timeout_next = tcap_cyc2time(absolute_us);
+}
+
+static inline void
+sl_timeout_relative(cycles_t offset)
+{ sl_timeout_oneshot(sl_now() + offset); }
+
+static inline microsec_t
+sl_cyc2usec(cycles_t cyc)
+{ return cyc / sl__globals()->cyc_per_usec; }
+
+static inline microsec_t
+sl_usec2cyc(microsec_t usec)
+{ return usec * sl__globals()->cyc_per_usec; }
+
 /* FIXME: integrate with param_set */
 static inline void
 sl_thd_setprio(struct sl_thd *t, tcap_prio_t p)
@@ -176,10 +217,6 @@ retry:
 	}
 	sl_print("E4");
 }
-
-static inline cycles_t
-sl_now(void)
-{ return ps_tsc(); }
 
 static inline int
 sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_tok_t sltok, tcap_t hitc, tcap_prio_t hiprio)
@@ -294,6 +331,7 @@ sl_cs_exit_schedule_nospin(void)
 	now    = sl_now();
 	offset = (s64_t)(globals->timer_next - now);
 	if (globals->timer_next && offset <= 0) sl_timeout_mod_expended(now, globals->timer_next);
+	sl_timeout_mod_wakeup_expired(now);
 
 	/*
 	 * Once we exit, we can't trust t's memory as it could be
@@ -341,7 +379,7 @@ sl_cs_exit_schedule_nospin(void)
 		else t->budget -= budget;
 	}
 	ht = sl_timeout_mod_block_peek();
-	if (ht) {
+	if (ht && ht->wakeup_cycs < (now + sl_usec2cyc(200))) {
 		hitc = sl_thd_aep(ht)->tc;
 		hiprio = ht->prio;
 	}
@@ -395,43 +433,6 @@ struct sl_thd *sl_aepthd_tcap_alloc(cos_aepthd_fn_t fn, void *data, tcap_t tc);
  * uses sched_tc of the current component for tcap!
  */
 struct sl_thd *sl_aepthd_alloc(cos_aepthd_fn_t fn, void *data);
-
-/*
- * Time and timeout API.
- *
- * This can be used by the scheduler policy module *and* by the
- * surrounding component code.  To avoid race conditions between
- * reading the time, and setting a timeout, we avoid relative time
- * measurements.  sl_now gives the current cycle count that is on an
- * absolute timeline.  The periodic function sets a period that can be
- * used when a timeout has happened, the relative function sets a
- * timeout relative to now, and the oneshot timeout sets a timeout on
- * the same absolute timeline as returned by sl_now.
- */
-void sl_timeout_period(cycles_t period);
-
-static inline cycles_t
-sl_timeout_period_get(void)
-{ return sl__globals()->period; }
-
-static inline void
-sl_timeout_oneshot(cycles_t absolute_us)
-{
-	sl__globals()->timer_next   = absolute_us;
-	sl__globals()->timeout_next = tcap_cyc2time(absolute_us);
-}
-
-static inline void
-sl_timeout_relative(cycles_t offset)
-{ sl_timeout_oneshot(sl_now() + offset); }
-
-static inline microsec_t
-sl_cyc2usec(cycles_t cyc)
-{ return cyc / sl__globals()->cyc_per_usec; }
-
-static inline microsec_t
-sl_usec2cyc(microsec_t usec)
-{ return usec * sl__globals()->cyc_per_usec; }
 
 void sl_thd_param_set(struct sl_thd *t, sched_param_t sp);
 

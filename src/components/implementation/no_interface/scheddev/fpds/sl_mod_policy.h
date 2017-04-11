@@ -12,8 +12,11 @@ struct sl_thd_policy {
 	tcap_res_t     budget, expended;
 	struct ps_list list;
 
+	int blocked;
+
 #ifdef SL_DEBUG_DEADLINES
 	cycles_t       deadline;
+	u32_t          missed, made;
 #endif
 
 };
