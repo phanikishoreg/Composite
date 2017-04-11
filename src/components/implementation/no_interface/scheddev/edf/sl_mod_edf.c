@@ -50,6 +50,7 @@ sl_mod_schedule(void)
 
 	td = sl_mod_thd_get(t);
 	if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
+		t->last_period_exec = sl_exec_cycles();
 		t->last_period = now;
 		td->budget    += t->budget;
 		t->expended    = 0;
@@ -63,12 +64,14 @@ sl_mod_block(struct sl_thd_policy *t)
 {
 	if (t->prio_idx < 0) return;
 #ifdef SL_DEBUG_DEADLINES
-	cycles_t now;
+	cycles_t now, now_exec;
 	static long print_counter = 0;
 
 	rdtscll(now);
+	now_exec = sl_exec_cycles();
 
-	if (now > t->deadline) dl_missed ++;
+	//if (now > t->deadline) dl_missed ++;
+	if (now_exec > t->deadline_exec) dl_missed ++;
 	if (now - prev > sl_usec2cyc(10 * SL_DEBUG_DL_MISS_DIAG_USEC)) {
 		prev = now;
 		sl_mod_print(" %ld:C:%llu ", print_counter ++, dl_missed);
@@ -78,7 +81,8 @@ sl_mod_block(struct sl_thd_policy *t)
 
 	heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
-	t->priority  = t->deadline;
+	t->deadline_exec += t->period;
+	t->priority  = t->deadline_exec;
 	assert(t->priority <= SL_EDF_DL_LOW);
 	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 	t->prio_idx  = -1;
@@ -112,6 +116,8 @@ sl_mod_thd_create(struct sl_thd_policy *t)
 	t->last_period = 0;
 	t->budget_usec = 0;
 	t->budget      = 0;
+	t->deadline_exec = t->deadline;
+	t->last_period_exec = 0;
 	
 	assert((heap_size(hs)+1) < SL_EDF_MAX_THDS);
 	heap_add(hs, t);
@@ -125,7 +131,7 @@ sl_mod_thd_delete(struct sl_thd_policy *t)
 void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
-	static cycles_t now;
+	static cycles_t now, now_exec;
 
 	assert(type == SCHEDP_WINDOW || type == SCHEDP_BUDGET);
 	if (type == SCHEDP_WINDOW) {
@@ -133,8 +139,12 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		t->period = sl_usec2cyc(t->period_usec);
 
 		/* first deadline. */
-		if (!now) rdtscll(now);
+		if (!now) {
+			rdtscll(now);
+			now_exec = sl_exec_cycles();
+		}
 		t->deadline = now + t->period;
+		t->deadline_exec = now_exec + t->period;
 #ifdef SL_DEBUG_DEADLINES
 		prev = now;
 #endif
@@ -143,19 +153,19 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		 *          (or, can we make cos_switch/cos_tcap_delegate support prio=64bits?).
 		 *       2. wraparound (64bit or 48bit) logic for deadline-based-heap!
 		 */
-		t->priority = t->deadline;
+		t->priority = t->deadline_exec;
 		assert(t->priority <= SL_EDF_DL_LOW);
 		heap_adjust(hs, t->prio_idx);
 		debug("param_set= adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 	} else if (type == SCHEDP_BUDGET) {
 		t->budget_usec = v;
-		t->budget = sl_usec2cyc(t->budget_usec);
+		//t->budget = sl_usec2cyc(t->budget_usec);
 	}
 }
 
 static int
 __compare_min(void *a, void *b)
-{ return ((struct sl_thd_policy *)a)->deadline <= ((struct sl_thd_policy *)b)->deadline; }
+{ return ((struct sl_thd_policy *)a)->deadline_exec <= ((struct sl_thd_policy *)b)->deadline_exec; }
 
 static void
 __update_idx(void *e, int pos)

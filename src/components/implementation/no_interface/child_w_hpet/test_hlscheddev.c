@@ -145,7 +145,8 @@ cos_init(void)
 
 	for (i = 0 ; i < N_TESTTHDS-1 ; i++) {
 		if (i == HPETAEP_THD) {
-			threads[i] = sl_aepthd_alloc(test_hpetaep_fn, (void *)i);
+			threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
+							  sl_thd_aep(sl__globals()->sched_thd)->tc);
 			assert(threads[i]);
 
 			sp.c.type  = SCHEDP_WINDOW;

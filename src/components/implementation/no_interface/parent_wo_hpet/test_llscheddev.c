@@ -36,9 +36,11 @@ test_thd_fn(void *data)
 	while (1) {
 		microsec_t workusecs = W_array[(int)data];
 
-		rdtscll(prev);
+		prev = sl_exec_cycles();
+		//rdtscll(prev);
 		spin_usecs(workusecs);
-		rdtscll(now);
+		//rdtscll(now);
+		now = sl_exec_cycles();
 
 //		if (now - prev > sl_usec2cyc(C_array[(int)data])) {
 //			printc(" l=%u ", tid);

@@ -52,6 +52,7 @@ struct tcap {
 	u8_t               ndelegs, curr_sched_off;
 	u16_t              cpuid;
 	tcap_prio_t        perm_prio;
+	cycles_t           exec_cycs, last_active;
 
 	/*
 	 * Which chain of temporal capabilities resulted in this
@@ -133,6 +134,8 @@ static inline tcap_res_t
 tcap_consume(struct tcap *t, tcap_res_t cycles)
 {
 	assert(t);
+
+	t->exec_cycs += cycles;
 	if (TCAP_RES_IS_INF(t->budget.cycles)) return 0;
 	if (cycles >= t->budget.cycles || tcap_cycles_same(cycles, t->budget.cycles)) {
 		t->budget.cycles = 0;
@@ -178,6 +181,7 @@ tcap_current_set(struct cos_cpu_local_info *cos_info, struct tcap *t)
 	/* remove transient prio on current tcap before switching to a new tcap */
 	if(curr->perm_prio != tcap_sched_info(curr)->prio) tcap_setprio(curr, curr->perm_prio);
 	cos_info->curr_tcap = t;
+	rdtscll(t->last_active);
 }
 
 /* hack to avoid header file recursion */
@@ -279,6 +283,27 @@ tcap_introspect(struct tcap *t, unsigned long op, unsigned long *retval)
 {
 	switch(op) {
 	case TCAP_GET_BUDGET: *retval = t->budget.cycles; break;
+	default: return -EINVAL;
+	}
+
+	return 0;
+}
+
+static inline int
+tcap_introspect64(struct cos_cpu_local_info *cos_info, struct tcap *t, unsigned long op, u64_t *retval)
+{
+
+	switch(op) {
+	case TCAP_GET_EXECCYCS:
+	{
+		*retval = t->exec_cycs;
+		if(tcap_current(cos_info) == t) {
+			cycles_t now;
+			rdtscll(now);
+			*retval += (now - t->last_active);
+		}
+		break;
+	}
 	default: return -EINVAL;
 	}
 

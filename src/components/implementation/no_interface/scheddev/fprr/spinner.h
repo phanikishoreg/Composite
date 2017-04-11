@@ -8,13 +8,26 @@
 static inline void
 spin_usecs(microsec_t usecs)
 {
-	cycles_t cycs = sl_usec2cyc(usecs);
+	cycles_t cycs = sl_usec2cyc(usecs), cycs0;
 	cycles_t now;
 
+	cycs0 = cycs;
+	cycles_t exec_now = sl_exec_cycles(), exec_end, end_act;
+	exec_end += cycs;
 	rdtscll(now);
 	cycs += now;
 
 	while (now < cycs) rdtscll(now);
+	end_act = sl_exec_cycles();
+
+	if (end_act < exec_end) {
+		// haven't spinned as long..
+		// another attempt at it..
+		rdtscll(now);
+		cycs = now + cycs0 - (exec_end - end_act);
+			
+		while (now < cycs) rdtscll(now);
+	}
 }
 
 /*

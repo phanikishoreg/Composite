@@ -361,6 +361,7 @@ retry_rcv:
 				continue;
 			}
 
+			//printc(" %u:%llu ", sl_thd_curr()->thdid, sl_exec_cycles());
 			sl_print("b=%d,%d,%u,%d,%llu", pending, rcvd, tid, blocked, cycles);
 			ret = sl_cs_enter_sched();
 			if (ret == -EBUSY) { 

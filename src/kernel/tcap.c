@@ -37,6 +37,7 @@ __tcap_init(struct tcap *t)
 	t->refcnt                  = 1;
 	t->arcv_ep                 = NULL;
 	t->perm_prio               = 0;
+	t->exec_cycs               = 0;
 	tcap_setprio(t, 0);
 	list_init(&t->active_list, t);
 }

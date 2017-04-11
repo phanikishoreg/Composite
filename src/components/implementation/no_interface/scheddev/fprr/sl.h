@@ -77,6 +77,17 @@ sl__globals(void)
 { return &sl_global_data; }
 
 static inline cycles_t
+sl_exec_cycles(void)
+{
+	cycles_t exec;
+
+	if (cos_introspect64(cos_compinfo_get(cos_defcompinfo_curr_get()), 
+	    sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_EXECCYCS, &exec)) assert(0);
+
+	return exec;
+}
+
+static inline cycles_t
 sl_now(void)
 { return ps_tsc(); }
 

@@ -10,6 +10,7 @@ struct sl_thd_policy {
 	microsec_t     period_usec, budget_usec;
 	cycles_t       period, deadline, last_period;
 	tcap_res_t     budget, expended;
+	cycles_t       deadline_exec, last_period_exec;
 
 	int            prio_idx;
 };
