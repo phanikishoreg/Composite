@@ -173,6 +173,7 @@ sl_thd_alloc_init(thdid_t tid, struct cos_aep_info *aep, asndcap_t snd, sl_thd_t
 
 	t->period = t->wakeup_cycs = 0;
 	t->wakeup_idx = -1;
+	t->prio   = TCAP_PRIO_MIN;
 done:
 	return t;
 }
@@ -311,9 +312,12 @@ void
 sl_timeout_period(microsec_t period)
 {
 	cycles_t p = sl_usec2cyc(period);
+	cycles_t now;
 
 	sl__globals()->period = p;
-	sl_timeout_relative(p);
+	now = sl_now();
+	sl_timeout_oneshot(now + (p - (now % p)));
+	//sl_timeout_relative(p);
 }
 
 /* engage space heater mode */
@@ -349,6 +353,7 @@ sl_init(void)
 	g->sched_thd    = sl_thd_alloc_init(cos_thdid(), aep, 0, SL_THD_AEP);
 	assert(g->sched_thd);
 	g->sched_thdcap = BOOT_CAPTBL_SELF_INITTHD_BASE;
+	sl_thd_setprio(g->sched_thd, TCAP_PRIO_MAX);
 
 	g->idle_thd     = sl_thd_alloc(sl_idle, NULL);
 	assert(g->idle_thd);
@@ -364,9 +369,9 @@ sl_sched_loop(void)
 
 	while (1) {
 		int pending, ret;
-		rcv_flags_t rf_def = RCV_ALL_PENDING, rf_use;
+		rcv_flags_t rf_def = 0, rf_use;
 
-		rf_use = rf_def;// | RCV_NON_BLOCKING;
+		rf_use = rf_def; // | RCV_NON_BLOCKING;
 		do {
 			thdid_t        tid;
 			int            blocked, rcvd;
@@ -383,8 +388,9 @@ retry_rcv:
 			sl_print("a");
 			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf_use, &rcvd, &tid, &blocked, &cycles);
 			if (pending == -EAGAIN) {
-				rf_use = rf_def;
-				sl_print("j");
+//				rf_use = rf_def;
+//				sl_print("j");
+				//break;
 				continue;
 			}
 			if (!tid) { 
@@ -420,6 +426,7 @@ retry_rcv:
 			sl_print("g");
 			continue; /* if there are pending notifications.. */
 		}
+		sl_mod_deadlines();
 
 			sl_print("h");
 		/* If switch returns an inconsistency, we retry anyway */

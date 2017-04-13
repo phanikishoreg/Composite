@@ -18,7 +18,7 @@
 
 #define COS_DEFAULT_RET_CAP 0
 
-static int print_this = 0;
+static int print_this = 1;
 /*
  * TODO: switch to a dedicated TLB flush thread (in a separate
  * protection domain) to do this.
@@ -448,14 +448,16 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 
 	if (unlikely(curr == next)) {
 		if(print_this) {
-		//	print_this = 0;
-			printk(" %u^%u ", curr->tid, next->tid);
+//			print_this = 0;
+		//	printk(" %u*%u ", curr->tid, next->tid);
 		}
-		assert(!(curr->state & THD_STATE_RCVING));
+		//assert(!(curr->state & THD_STATE_RCVING));
 
 		if (curr->state & THD_STATE_PREEMPTED) {
 			curr->state &= ~THD_STATE_PREEMPTED;
 			return 1;
+		} else if (curr->state & THD_STATE_RCVING) {
+			curr->state &= ~THD_STATE_RCVING;
 		}
 
 		__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
@@ -493,6 +495,7 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 		unsigned long a = 0, b = 0;
 
 		assert(!(next->state & THD_STATE_PREEMPTED));
+		//printk(" u:%u:%u ", curr->tid, next->tid);
 		next->state &= ~THD_STATE_RCVING;
 		thd_state_evt_deliver(next, &a, &b);
 		if (thd_rcvcap_isflushall_get(next)) {
@@ -509,8 +512,8 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 	copy_all_regs(&next->regs, regs);
 
 	if(print_this) {
-	//	print_this = 0;
-		printk(" %u^%u ", curr->tid, next->tid);
+//		print_this = 0;
+		//printk(" %u^%u ", curr->tid, next->tid);
 	}
 //	printk(" %u^%u ", curr->tid, next->tid);
 	return preempt;
@@ -636,7 +639,7 @@ cap_update(struct pt_regs *regs, struct thread *thd_curr, struct thread *thd_nex
 	if (intr_context || switch_away) {
 		timeout = 0;
 		sched   = NULL;
-		if (st != thd_next) thd_next = notify_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
+		/*if (st != thd_next)*/ thd_next = notify_process(thd_next, thd_curr, tc_next, tc_curr, &tc_next, 1);
 		if (thd_next == thd_curr && tc_next == tc_curr) return (intr_context ? 1 : 0);
 	}
 
@@ -720,19 +723,6 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 	return ret;
 }
 
-static inline struct cap_arcv *
-__cap_asnd_to_arcv(struct cap_asnd *asnd)
-{
-	struct cap_arcv *arcv;
-
-	if (unlikely(!ltbl_isalive(&(asnd->comp_info.liveness)))) return NULL;
-	arcv = (struct cap_arcv *)captbl_lkup(asnd->comp_info.captbl, asnd->arcv_capid);
-	if (unlikely(!CAP_TYPECHK(arcv, CAP_ARCV)))               return NULL;
-	/* FIXME: check arcv epoch + liveness */
-
-	return arcv;
-}
-
 static int
 cap_asnd_op(struct cap_asnd *asnd, struct thread *thd, struct pt_regs *regs,
 	    struct comp_info *ci, struct cos_cpu_local_info *cos_info)
@@ -746,7 +736,7 @@ cap_asnd_op(struct cap_asnd *asnd, struct thread *thd, struct pt_regs *regs,
 	assert(asnd->arcv_capid);
 	/* IPI notification to another core */
 	if (asnd->arcv_cpuid != curr_cpu) return cos_cap_send_ipi(asnd->arcv_cpuid, asnd);
-	arcv = __cap_asnd_to_arcv(asnd);
+	arcv = asnd_to_arcv(asnd);
 	if (unlikely(!arcv)) return -EINVAL;
 
 	rcv_thd  = arcv->thd;
@@ -781,7 +771,7 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 		return 1;
 	}
 
-	arcv     = __cap_asnd_to_arcv(asnd);
+	arcv     = asnd_to_arcv(asnd);
 	if (unlikely(!arcv)) return 1;
 
 	cos_info = cos_cpu_local_info();
@@ -818,7 +808,7 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 //		}
 //	}
 //
-	//print_this = 1;
+	print_this = 1;
 	return cap_switch(regs, thd, next, tcap_next, timeout, NULL, ci, cos_info);
 }
 
@@ -872,7 +862,7 @@ timer_process(struct pt_regs *regs)
 	comp     = thd_invstk_current(thd_curr, &ip, &sp, cos_info);
 	assert(comp);
 
-	//print_this = 1;
+	print_this = 1;
 	return expended_process(regs, thd_curr, comp, cos_info, 1);
 }
 
@@ -935,13 +925,14 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 			__userregs_setretvals(regs, thd_rcvcap_pending(thd), a, b);
 		}
 
-		//printk(" ! ");
+		//printk(" !%u ", thd->tid);
 		return 0;
 	} else if (rflags & RCV_NON_BLOCKING) {
+
 		__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
 		__userregs_setretvals(regs, -EAGAIN, 0, 0);
 
-		//printk(" ! ");
+		//printk(" #%u ", thd->tid);
 		return 0;
 	}
 
@@ -986,12 +977,13 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 		//printk(" x:%u ", next->tid);
 		assert(!(thd->state & THD_STATE_PREEMPTED));
 		thd->state |= THD_STATE_RCVING;
+		//printk(" b:%u:%u ", thd->tid, next->tid);
 		thd_rcvcap_isflushall_set(thd, !!(rflags & RCV_ALL_PENDING));
 	} else {
-		//printk(" s ");
+		//printk(" s:%u ", thd->tid);
 	}
 
-	//print_this = 1;
+	print_this = 1;
 	return cap_switch(regs, thd, next, tc_next, timeout, NULL, ci, cos_info);
 }
 
@@ -1645,14 +1637,20 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			struct tcap     *tc;
 
 			rcv = (struct cap_arcv *)captbl_lkup(ci->captbl, tcpdst);
-			if (!CAP_TYPECHK_CORE(rcv, CAP_ARCV)) cos_throw(err, -EINVAL);
+			if (!CAP_TYPECHK_CORE(rcv, CAP_ARCV)) {
+				printk("%s:%d\n", __func__, __LINE__);
+				cos_throw(err, -EINVAL);
+			}
 
 			rthd = rcv->thd;
 			tc = rthd->rcvcap.rcvcap_tcap;
 			assert(rthd && tc);
 
 			ret = tcap_delegate(tc, tcapsrc->tcap, res, prio);
-			if (unlikely(ret)) cos_throw(err, -EINVAL);
+			if (unlikely(ret)) {
+				printk("%s:%d\n", __func__, __LINE__);
+				cos_throw(err, ret);
+			}
 
 			if(tcap_expended(tcap_current(cos_info))) {
 				ret = expended_process(regs, thd, ci, cos_info, 0);
@@ -1685,7 +1683,7 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			asnd        = (struct cap_asnd *)captbl_lkup(ci->captbl, asnd_cap);
 			if (unlikely(!CAP_TYPECHK(asnd, CAP_ASND))) cos_throw(err, -EINVAL);
 
-			arcv = __cap_asnd_to_arcv(asnd);
+			arcv = asnd_to_arcv(asnd);
 			if (unlikely(!arcv)) cos_throw(err, -EINVAL);
 
 			rthd = arcv->thd;
@@ -1693,7 +1691,7 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			assert(rthd && tcapdst);
 
 			ret = tcap_delegate(tcapdst, tcapsrc->tcap, res, prio);
-			if (unlikely(ret)) cos_throw(err, -EINVAL);
+			if (unlikely(ret)) cos_throw(err, ret);
 
 			n = asnd_process(rthd, thd, tcapdst, tcap_current(cos_info), &tcap_next, yield, cos_info);
 			if (n != thd) {

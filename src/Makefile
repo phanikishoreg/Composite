@@ -36,6 +36,7 @@ cp: cpplat
 clean:
 	$(MAKE) $(MAKEFLAGS) -C platform clean
 	$(MAKE) $(MAKEFLAGS) -C components clean
+	@rm -f `pwd`/../transfer/*
 
 
 distclean: clean

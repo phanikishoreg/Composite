@@ -32,6 +32,10 @@ sl_mod_schedule(void)
 }
 
 void
+sl_mod_deadlines(void)
+{ }
+
+void
 sl_mod_block(struct sl_thd_policy *t)
 {
 	ps_list_rem_d(t);

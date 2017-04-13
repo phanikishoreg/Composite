@@ -390,7 +390,7 @@ sl_cs_exit_schedule_nospin(void)
 		else t->budget -= budget;
 	}
 	ht = sl_timeout_mod_block_peek();
-	if (ht && ht->wakeup_cycs < (now + sl_usec2cyc(200))) {
+	if (ht) { // && ht->wakeup_cycs < (now + sl_usec2cyc(200))) {
 		hitc = sl_thd_aep(ht)->tc;
 		hiprio = ht->prio;
 	}

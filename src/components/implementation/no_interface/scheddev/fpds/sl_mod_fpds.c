@@ -5,7 +5,6 @@
 
 #ifdef SL_DEBUG_DEADLINES
 #define sl_mod_print printc
-static unsigned long long dl_missed = 0;
 static cycles_t prev = 0;
 static thdid_t thd_start = 0, thd_end = 0;
 #else
@@ -17,7 +16,7 @@ static thdid_t thd_start = 0, thd_end = 0;
 #define SL_FPDS_LOWEST  (SL_FPDS_NPRIOS-1)
 
 #define SL_FPDS_USEC_MIN 1
-#define SL_FPDS_USEC_MAX 10000
+#define SL_FPDS_USEC_MAX 1000000
 
 struct ps_list_head threads[SL_FPDS_NPRIOS];
 
@@ -40,6 +39,28 @@ sl_mod_schedule(void)
 {
 	int i;
 
+//	static int first = 1;
+//	if (first) {
+//		cycles_t now;
+//
+//		first = 0;
+//		now = sl_now();
+//		now += (sl_timeout_period_get() - (now % sl_timeout_period_get()));
+//
+//		for (i = 0 ; i < SL_FPDS_NPRIOS ; i ++) {
+//			struct sl_thd_policy *tp;
+//
+//			ps_list_foreach_d(&threads[i], tp) {
+//				struct sl_thd *t = sl_mod_thd_get(tp);
+//				t->wakeup_cycs = now;
+//#ifdef SL_DEBUG_DEADLINES
+//				prev = now;
+//				tp->deadline = now + tp->period;
+//#endif
+//			}
+//		}
+//	}
+
 	for (i = 0 ; i < SL_FPDS_NPRIOS ; i++) {
 		struct sl_thd_policy *t;
 		struct sl_thd *td;
@@ -60,6 +81,7 @@ sl_mod_schedule(void)
 		}
 
 		sl_print("M:%u\n", td->thdid);
+		//printc(" M:%u ", td->thdid);
 		return t;
 	}
 
@@ -67,50 +89,91 @@ sl_mod_schedule(void)
 }
 
 void
-sl_mod_block(struct sl_thd_policy *t)
+sl_mod_deadlines(void)
 {
-	sl_print("B%u", sl_mod_thd_get(t)->thdid);
-	if (t->blocked) return;
-
-	t->blocked = 1;
 #ifdef SL_DEBUG_DEADLINES
 	cycles_t now;
-	static long print_counter = 0, child_miss_count = 0;
+	static long print_counter = 0;
 
 	rdtscll(now);
 
-	if (now < t->deadline) {
-		t->made ++;
-	} else {
-		t->missed ++;
-		dl_missed ++;
-//		child_miss_count ++;
-//		if (child_miss_count > 100) while (1);
-//		if (sl_mod_thd_get(t)->type == SL_THD_CHILD_SCHED) {
-//			child_miss_count ++;
-//			if (child_miss_count > 10) while (1);
-//		}
-	}
-//	sl_mod_print(" %u:%llu:%llu ", sl_mod_thd_get(t)->thdid, now, t->deadline);
-	t->deadline += t->period;
 	if (now - prev > sl_usec2cyc(10 * SL_DEBUG_DL_MISS_DIAG_USEC)) {
 		thdid_t tmp = thd_start;
 	//	char buf[1024] = { 0 };
 
 		prev = now;
 		//sprintc(buf, " %ld:P:%llu ", print_counter ++, dl_missed);
-		sl_mod_print(" %ld:P:%llu ", print_counter ++, dl_missed);
+		sl_mod_print(" P@%ld=>%llu:%llu ", print_counter, dl_made, dl_missed);
+		while (tmp <= thd_end) {
+			struct sl_thd *td = sl_thd_lkup(tmp);
+			struct sl_thd_policy *tdp = sl_mod_thd_policy_get(td);
+			//sprintc(buf + strlen(buf), " %u:%lu:%lu ", td->thdid, tdp->made, tdp->missed);
+
+			if (td->thdid != (sl__globals()->idle_thd)->thdid)
+				sl_mod_print(" pt%u:%ld:%ld ", td->thdid, tdp->made, tdp->missed);
+
+			tmp ++;
+		}
+		//sl_mod_print("%s", buf);
+		print_counter ++;
+		if (print_counter >= 20) while (1);
+	}
+#endif
+}
+
+void
+sl_mod_block(struct sl_thd_policy *t)
+{
+	sl_print("B%u", sl_mod_thd_get(t)->thdid);
+//	printc("B%u", sl_mod_thd_get(t)->thdid);
+	if (t->blocked) return;
+
+	t->blocked = 1;
+#ifdef SL_DEBUG_DEADLINES
+	cycles_t now;
+//	static long print_counter = 0, child_miss_count = 0;
+
+	rdtscll(now);
+
+	/*if (sl_mod_thd_get(t)->type != SL_THD_SIMPLE)*/ {
+		if (now <= t->deadline) {
+			dl_made ++;
+			t->made ++;
+		} else {
+			t->missed ++;
+			dl_missed ++;
+			//		child_miss_count ++;
+			//		if (child_miss_count > 100) while (1);
+			//		if (sl_mod_thd_get(t)->type == SL_THD_CHILD_SCHED) {
+			//			child_miss_count ++;
+			//			if (child_miss_count > 10) while (1);
+			//		}
+		}
+	}
+//	sl_mod_print(" %u:%llu:%llu ", sl_mod_thd_get(t)->thdid, now, t->deadline);
+	t->deadline += t->period;
+	//if (now - prev > sl_usec2cyc(40*1000)) {
+//	if (now - prev > sl_usec2cyc(10 * SL_DEBUG_DL_MISS_DIAG_USEC)) {
+//		thdid_t tmp = thd_start;
+//	//	char buf[1024] = { 0 };
+//
+//		prev = now;
+//		//sprintc(buf, " %ld:P:%llu ", print_counter ++, dl_missed);
+//		sl_mod_print(" P@%ld=>%llu:%llu ", print_counter, dl_made, dl_missed);
 //		while (tmp <= thd_end) {
 //			struct sl_thd *td = sl_thd_lkup(tmp);
 //			struct sl_thd_policy *tdp = sl_mod_thd_policy_get(td);
 //			//sprintc(buf + strlen(buf), " %u:%lu:%lu ", td->thdid, tdp->made, tdp->missed);
-//			sl_mod_print(" %u:%ld:%ld ", td->thdid, tdp->made, tdp->missed);
+//
+//			if (td->thdid != (sl__globals()->idle_thd)->thdid)
+//				sl_mod_print(" pt%u:%ld:%ld ", td->thdid, tdp->made, tdp->missed);
 //
 //			tmp ++;
 //		}
-		//sl_mod_print("%s", buf);
-		if (print_counter > 100) while (1);
-	}
+//		//sl_mod_print("%s", buf);
+//		print_counter ++;
+//		if (print_counter >= 20) while (1);
+//	}
 #endif
 	ps_list_rem_d(t);
 	sl_timeout_mod_block(sl_mod_thd_get(t), 1, 0);
@@ -121,15 +184,17 @@ sl_mod_wakeup(struct sl_thd_policy *t)
 {
 	struct sl_thd *th = sl_mod_thd_get(t);
 	sl_print("W%u", sl_mod_thd_get(t)->thdid);
+//	printc("W%u", sl_mod_thd_get(t)->thdid);
 	/*
 	 * TODO:
 	 * there are different reasons for getting a number of wakeup events.. 
 	 * 1. cos_asnd on a blocked thread, every such asnd will add a unblocked event to the sched.
 	 * 2. expending tcap-budget, will get a unblocked (not really that) event to the sched.
 	 */
+	if (t->blocked == 0) return;
 	t->blocked = 0;
 	sl_mod_yield(t, NULL);
-	if (th->type == SL_THD_AEP || th->type == SL_THD_AEP_TCAP) sl_timeout_mod_wakeup(th);
+	if (th->type == SL_THD_AEP || th->type == SL_THD_AEP_TCAP) sl_timeout_mod_remove(th);
 }
 
 void
@@ -168,7 +233,7 @@ sl_mod_thd_delete(struct sl_thd_policy *t)
 void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
-	static cycles_t now;
+	static cycles_t start_now;
 	/*
 	 * TODO: Gets a bit tricky on the order of the params set to validate
 	 *       For now, assume the order param_set(BUDGET)->param_set(WINDOW)->param_set(PRIO)
@@ -183,6 +248,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		ps_list_rem_d(t); /* if we're already on a list, and we're updating priority */
 		t->priority = v;
 		ps_list_head_append_d(&threads[t->priority], t);
+		sl_thd_setprio(sl_mod_thd_get(t), t->priority);
 
 		break;
 	}
@@ -192,11 +258,15 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		t->period_usec = v;
 		t->period = sl_usec2cyc(v);
 
+		if (!start_now) {
+			start_now = sl_now();
+			//start_now += (sl_timeout_period_get() - (start_now % sl_timeout_period_get()));
+		}
+		sl_mod_thd_get(t)->wakeup_cycs = start_now;
 #ifdef SL_DEBUG_DEADLINES
-		if (!now) rdtscll(now);
-		t->deadline = now + t->period;
+		t->deadline = start_now + t->period;
 //		printc(" %u:%llu:%llu ", sl_mod_thd_get(t)->thdid, t->deadline, t->period);
-		prev = now;
+		prev = start_now;
 #endif
 
 		break;
@@ -225,6 +295,9 @@ sl_mod_init(void)
 	int i;
 	struct sl_thd *t;
 
+#ifdef SL_DEBUG_DEADLINES
+	dl_missed = dl_made = 0;
+#endif
 	for (i = 0 ; i < SL_FPDS_NPRIOS ; i++) {
 		ps_list_head_init(&threads[i]);
 	}

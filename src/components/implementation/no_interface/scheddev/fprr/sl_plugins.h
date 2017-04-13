@@ -35,6 +35,7 @@ static inline struct sl_thd_policy *sl_mod_thd_policy_get(struct sl_thd *t);
 void sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles);
 struct sl_thd_policy *sl_mod_schedule(void);
 
+void sl_mod_deadlines(void);
 void sl_mod_block(struct sl_thd_policy *t);
 void sl_mod_wakeup(struct sl_thd_policy *t);
 void sl_mod_yield(struct sl_thd_policy *t, struct sl_thd_policy *tp);
@@ -51,7 +52,7 @@ void sl_timeout_mod_init(void);
 /* API for waking up threads using timer management module */
 void sl_timeout_mod_block(struct sl_thd *t, int implicit, cycles_t wkup_cycs);
 struct sl_thd *sl_timeout_mod_block_peek(void);
-void sl_timeout_mod_wakeup(struct sl_thd *t);
+void sl_timeout_mod_remove(struct sl_thd *t);
 void sl_timeout_mod_wakeup_expired(cycles_t now);
 
 #endif	/* SL_PLUGINS_H */

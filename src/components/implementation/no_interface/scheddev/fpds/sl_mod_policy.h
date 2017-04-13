@@ -21,6 +21,10 @@ struct sl_thd_policy {
 
 };
 
+#ifdef SL_DEBUG_DEADLINES
+unsigned long long dl_missed, dl_made;
+#endif
+
 static inline struct sl_thd *
 sl_mod_thd_get(struct sl_thd_policy *tp)
 { return &tp->thd; }

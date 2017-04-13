@@ -49,30 +49,45 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
-#define N_TOTALTHDS 5
-#define N_TESTTHDS (N_TOTALTHDS - 1)
+#define MS_TO_US(m) (m*1000)
+#define N_TOTALTHDS 4
+#define N_TESTTHDS (3)//N_TOTALTHDS - 1)
 
-#define HPETAEP_THD (N_TESTTHDS - 1)
-microsec_t T_array[N_TOTALTHDS] = { 200, 200, 200, 200, 1000};
-microsec_t C_array[N_TOTALTHDS] = { 30, 60, 60, 20, 200};
-microsec_t W_array[N_TOTALTHDS] = { 25, 55, 50, 20, 190}; /* actual spin work! not including printing, blocking overheads */
+#define HPETAEP_THD (10)
+microsec_t T_array[N_TOTALTHDS] = { 40, 60, 80, 1000}; /* in ms */
+microsec_t C_array[N_TOTALTHDS] = { 4, 6, 8, 200}; /* in ms */
+microsec_t W_array[N_TOTALTHDS] = { 3900, 5900, 7900, 190}; /* in usecs, actual spin work! not including printing, blocking overheads */
 
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
 {
+	int first = 1;
+	struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
 	struct sl_thd       *t   = sl_thd_curr();
+	struct sl_thd_policy *tp = sl_mod_thd_policy_get(t);
 	struct cos_aep_info *aep = sl_thd_aep(t);
 	thdid_t              tid = t->thdid;
+	cycles_t             now;
 
-	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, T_array[HPETAEP_THD])) assert(0);
+//	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
 
 	while (1) {
+		microsec_t workusecs = W_array[(int)data];
 		rcv_flags_t flg = RCV_ALL_PENDING;
 		int rcvd;
+		int ret;
 
+		if (!first && (ret = cos_tcap_transfer(aep->rcv, aep->tc, 0, t->prio))) {
+			printc("ret=%d", ret);
+			assert(0);
+		}
+		first = 0;
 		cos_rcv(rcv, flg, &rcvd);
+		//sl_mod_thd_policy_get(t)->missed += (rcvd - 1);
+		//spin_usecs(workusecs);
 
 		//printc("h=%u:%d", tid, rcvd);
+		//sl_mod_block(sl_mod_thd_policy_get(t));
 	}
 
 	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
@@ -81,20 +96,24 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 void
 test_thd_fn(void *data)
 {
-	cycles_t now, prev;
+	struct sl_thd *t = sl_thd_curr();
+	struct sl_thd_policy *tp = sl_mod_thd_policy_get(t);
 	thdid_t tid = cos_thdid();
 
 	while (1) {
+		int missed = 0;
 		microsec_t workusecs = W_array[(int)data];
 	
-		rdtscll(prev);
-		spin_usecs(workusecs);
-		rdtscll(now);
-
-//		if (now - prev > C_array[(int)data]) {
-//			printc("h=%u", tid);
+		missed = spin_usecs_dl(workusecs, tp->deadline);
+#ifdef SL_DEBUG_DEADLINES
+//		if (missed) {
+//			dl_missed ++;
+//			tp->missed ++;
+//		} else {
+//			dl_made ++;
+//			tp->made ++;
 //		}
-
+#endif
 		sl_thd_block(0);
 	}
 }
@@ -117,9 +136,9 @@ test_loop(void *data)
 		spin_usecs(workusecs);
 		rdtscll(now);
 
-		if (now - prev > C_array[(int)data]) {
-			printc("h=%u", ctid);
-		}
+//		if (now - prev > C_array[(int)data]) {
+//			printc("h=%u", ctid);
+//		}
 
 	}
 }
@@ -143,25 +162,27 @@ cos_init(void)
 
 	sl_init();
 
-	for (i = 0 ; i < N_TESTTHDS-1 ; i++) {
+	for (i = 0 ; i < N_TESTTHDS ; i++) {
 		if (i == HPETAEP_THD) {
-			threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
-							  sl_thd_aep(sl__globals()->sched_thd)->tc);
+			threads[i] = sl_aepthd_alloc(test_hpetaep_fn, (void *)i);
+			//threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
+			//				  sl_thd_aep(sl__globals()->sched_thd)->tc);
 			assert(threads[i]);
 
 			sp.c.type  = SCHEDP_WINDOW;
-			sp.c.value = T_array[i];
+			sp.c.value = MS_TO_US(T_array[i]);
 			sl_thd_param_set(threads[i], sp.v);
 			
 			sp.c.type  = SCHEDP_BUDGET;
-			sp.c.value = C_array[i];
+			sp.c.value = MS_TO_US(C_array[i]);
 			sl_thd_param_set(threads[i], sp.v);
+			if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, sl_thd_aep(threads[i])->rcv, MS_TO_US(T_array[i]))) assert(0);
 		} else {
 			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
 			assert(threads[i]);
 
 			sp.c.type  = SCHEDP_WINDOW;
-			sp.c.value = T_array[i];
+			sp.c.value = MS_TO_US(T_array[i]);
 			sl_thd_param_set(threads[i], sp.v);
 		}
 	}

@@ -20,27 +20,40 @@
 #define BUG() do { debug_print("BUG @ "); *((int *)0) = 0; } while (0);
 #define SPIN(iters) do { if (iters > 0) { for (; iters > 0 ; iters -- ) ; } else { while (1) ; } } while (0)
 
+#define N_TESTTHDS0 3
 #define N_TESTTHDS 3
+#define MS_TO_US(m)   (m * 1000)
 
-microsec_t T_array[N_TESTTHDS] = { 1000, 1000, 1000};
-microsec_t C_array[N_TESTTHDS] = { 50, 50, 50};
-microsec_t W_array[N_TESTTHDS] = { 45, 45, 45}; /* actual spin work! not including printing and blocking overheads */
-u32_t prio_array[N_TESTTHDS]   = { 1, 3, 4};
+microsec_t T_array[N_TESTTHDS0] = { 10, 30, 40};
+microsec_t C_array[N_TESTTHDS0] = { 1, 3, 4,};
+microsec_t W_array[N_TESTTHDS0] = { 990, 2990, 3990}; /* actual spin work in usecs! not including printing and blocking overheads */
+u32_t prio_array[N_TESTTHDS0]   = { 1, 3, 4};
 
 void
 test_thd_fn(void *data)
 {
-	thdid_t tid = cos_thdid();
+	struct sl_thd *t = sl_thd_curr();
+	struct sl_thd_policy *tp = sl_mod_thd_policy_get(t);
+	thdid_t tid = t->thdid;
 	cycles_t now, prev;
 
 	while (1) {
 		microsec_t workusecs = W_array[(int)data];
 
-		prev = sl_exec_cycles();
-		//rdtscll(prev);
+#ifdef SL_DEBUG_DEADLINES
+		int missed = 0;
+
+		missed = spin_usecs_dl(workusecs, tp->deadline);
+//		if (missed) {
+//			tp->missed ++;
+//			dl_missed ++;
+//		} else {
+//			tp->made ++;
+//			dl_made ++;
+//		}
+#else
 		spin_usecs(workusecs);
-		//rdtscll(now);
-		now = sl_exec_cycles();
+#endif
 
 //		if (now - prev > sl_usec2cyc(C_array[(int)data])) {
 //			printc(" l=%u ", tid);
@@ -69,10 +82,14 @@ test_llsched_init(void)
 		sp.c.value = prio_array[i];
 		sl_thd_param_set(threads[i], sp.v);
 		sp.c.type  = SCHEDP_WINDOW;
-		sp.c.value = T_array[i];
+		sp.c.value = MS_TO_US(T_array[i]);
 		sl_thd_param_set(threads[i], sp.v);
 	}
 
+//	cycles_t now;
+//	rdtscll(now);
+//	printc("%llu\n", now);
+//	while (1);
 	sl_sched_loop();
 
 	assert(0);

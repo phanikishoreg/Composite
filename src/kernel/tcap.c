@@ -37,7 +37,10 @@ __tcap_init(struct tcap *t)
 	t->refcnt                  = 1;
 	t->arcv_ep                 = NULL;
 	t->perm_prio               = 0;
+	t->last_active		   = 0;
 	t->exec_cycs               = 0;
+	t->intbmp		   = 0;
+	t->masked		   = 0;
 	tcap_setprio(t, 0);
 	list_init(&t->active_list, t);
 }
@@ -86,8 +89,20 @@ __tcap_budget_xfer(struct tcap *d, struct tcap *s, tcap_res_t cycles)
 	}
 	if (!TCAP_RES_IS_INF(bs->cycles)) bs->cycles -= cycles;
 done:
-	if (!tcap_is_active(d)) tcap_active_add_before(s, d);
-	if (tcap_expended(s))   tcap_active_rem(s);
+	if (!tcap_is_active(d)) {
+		tcap_active_add_before(s, d);
+		if (d->intbmp && d->masked == 1) {
+			chal_unmask_irqbmp(d->intbmp);
+			d->masked = 0;
+		}
+	}
+	if (tcap_expended(s)) {
+		tcap_active_rem(s);
+		if (s->intbmp && s->masked == 0) {
+			chal_mask_irqbmp(s->intbmp);
+			s->masked = 1;
+		}
+	}
 
 	return 0;
 }
@@ -147,13 +162,13 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 	int ret = 0;
 	/* doing this in-place is too much of a pain */
 	struct tcap_sched_info deleg_tmp[TCAP_MAX_DELEGATIONS];
+	tcap_prio_t srctmpprio;
 
 	assert(dst && src);
 	assert(tcap_isactive(dst));
 	/* check for stack overflow */
 	assert(round_to_page(&deleg_tmp[0]) == round_to_page(&deleg_tmp[TCAP_MAX_DELEGATIONS-1]));
 	if (unlikely(dst->ndelegs > TCAP_MAX_DELEGATIONS)) return -ENOMEM;
-	if (unlikely(!tcap_is_active(src))) return -EPERM;
 
 	d = tcap_sched_info(dst)->tcap_uid;
 	s = tcap_sched_info(src)->tcap_uid;
@@ -162,7 +177,10 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 		dst->perm_prio             = prio;
 		return 0;
 	}
+	if (unlikely(!tcap_is_active(src))) return -EPERM;
 	if (!prio) prio = tcap_sched_info(src)->prio;
+	srctmpprio = tcap_sched_info(src)->prio;
+	tcap_setprio(src, src->perm_prio);
 
 	for (i = 0, j = 0, ndelegs = 0 ; i < dst->ndelegs || j < src->ndelegs ; ndelegs++) {
 		struct tcap_sched_info *n, t;
@@ -190,6 +208,7 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 		if (d == deleg_tmp[ndelegs].tcap_uid) si = ndelegs;
 	}
 
+	tcap_setprio(src, srctmpprio);
 	if (__tcap_transfer(dst, src, cycles, prio)) return -EINVAL;
 	memcpy(dst->delegations, deleg_tmp, sizeof(struct tcap_sched_info) * ndelegs);
 	/* can't get to this point by delegating to yourself, thus 2 schedulers must be involved */

@@ -176,22 +176,26 @@ chal_cyc_usec(void)
 int
 periodic_handler(struct pt_regs *regs)
 {
-//	static cycles_t prev;
-//	cycles_t now;
+	static int counter;
+	static cycles_t prev;
+	cycles_t now;
 	int preempt = 1;
 
 	if (unlikely(timer_calibration_init)) timer_calibration();
 
 	ack_irq(HW_PERIODIC);
-//	printk("p");
-//	if (!prev) rdtscll(prev);
-//	else {
-//		rdtscll(now);
-//
-//		printk(" p:%llu ", now - prev);
-//		prev = now;
+//	if (!timer_calibration_init) {
+//		counter ++;
+//		if (!(counter % 100)) printk(" !%d! ", counter);
+//		//printk("p");
+//		//	if (!prev) rdtscll(prev);
+//		//	else {
+//		//		rdtscll(now);
+//		//
+//		//		if (!timer_calibration_init) printk(" p:%llu ", now - prev);
+//		//		prev = now;
+//		//	}
 //	}
-
 	preempt = cap_hw_asnd(&hw_asnd_caps[HW_PERIODIC], regs);
 	HPET_INT_ENABLE(TIMER_PERIODIC);
 
@@ -269,12 +273,11 @@ timer_find_hpet(void *timer)
 void
 chal_hpet_periodic_set(unsigned long usecs_period)
 {
-	unsigned long pico_per_hpetcyc, hpetcyc_per_period;
+	unsigned long tick_multiple = usecs_period / TIMER_DEFAULT_US_INTERARRIVAL;
+	cycles_t hpetcyc_per_period = hpetcyc_per_tick * tick_multiple;
 
 	assert(timer_calibration_init == 0);
-	pico_per_hpetcyc   = hpet_capabilities[1] / FEMPTO_PER_PICO;
-	hpetcyc_per_period = (usecs_period * PICO_PER_MICRO) / pico_per_hpetcyc;
-
+	//printk("Timer tick multiple: %lu usecs:%lu hpetcycs:%llu\n", tick_multiple, usecs_period, hpetcyc_per_period);
 	timer_set(TIMER_PERIODIC, hpetcyc_per_period);
 }
 

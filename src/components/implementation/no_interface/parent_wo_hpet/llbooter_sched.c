@@ -4,8 +4,8 @@
 #include <boot_deps.h>
 #include <sl.h>
 
-#define CHILD_WCET_C   200 //usecs
-#define CHILD_PERIOD_T 1000 //usecs
+#define CHILD_WCET_C   8000 //usecs
+#define CHILD_PERIOD_T 20000 //usecs
 #define CHILD_PRIO     2
 
 /*Component init info*/
