@@ -324,6 +324,11 @@ enum {
 };
 
 enum {
+	/* HW info */
+	HW_GET_FIRSTPERIOD,
+};
+
+enum {
 	/* cap 0-3 reserved for sret. 4-7 is the sinv cap. FIXME: make this general. */
 	SCHED_CAPTBL_ALPHATHD_BASE = 16,
 	/* we have 2 thd caps (init and alpha thds) for each core. */

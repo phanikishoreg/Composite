@@ -22,6 +22,12 @@ struct sl_thd_policy {
 unsigned long long dl_missed, dl_made;
 #endif
 
+extern cycles_t task_start_time;
+
+static inline cycles_t
+sl_mod_get_task_starttime(void)
+{ return task_start_time; }
+
 static inline struct sl_thd *
 sl_mod_thd_get(struct sl_thd_policy *tp)
 { return &tp->thd; }

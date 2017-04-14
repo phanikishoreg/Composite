@@ -64,6 +64,7 @@ struct sl_global {
 	struct sl_thd *idle_thd;
 
 	int            cyc_per_usec;
+	cycles_t       start_time;
 	cycles_t       period;
 	cycles_t       timer_next;
 	tcap_time_t    timeout_next;
@@ -263,7 +264,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 		if (budget) {
 			sl_print("A5\n");
 			if (sl__globals()->sched_tok == sltok) {
-				t->budget = 0;
+			//	t->budget = 0;
 				if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
 				return 0;
 			}
@@ -358,7 +359,7 @@ sl_cs_exit_schedule_nospin(void)
 	else {
 		t = sl_mod_thd_get(pt);
 		repl = t->budget;
-		//t->budget = 0;
+		t->budget = 0;
 		
 		if (repl) {
 			struct cos_aep_info *aep = sl_thd_aep(t);
@@ -382,7 +383,7 @@ sl_cs_exit_schedule_nospin(void)
 	//		sl_print("A4\n");
 	//		cos_asnd(t->sndcap, 1);
 	//	}
-	} else if (t->type == SL_THD_AEP_TCAP) {
+	} else if (t->type == SL_THD_AEP_TCAP && budget) {
 		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
 
 		if (pbudget < budget) budget = pbudget;
@@ -460,5 +461,6 @@ void sl_thd_param_set(struct sl_thd *t, sched_param_t sp);
  */
 void sl_init(void);
 void sl_sched_loop(void);
+void sl_init_sync(cycles_t start_cycs, cycles_t task_start);
 
 #endif	/* SL_H */

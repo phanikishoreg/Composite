@@ -97,24 +97,36 @@ test_thd_fn(void *data)
 void
 cos_init(void)
 {
-	int                     i;
+	int                     i, ret;
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
 	struct sl_thd          *threads[N_TOTALTHDS];
 	union sched_param       sp    = {.c = {.type = SCHEDP_WINDOW, .value = 0}};
+	cycles_t                sched_start_time, task_start_time, now;
+	unsigned int b = 0, c = 0;
 
 //	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
 	//cos_defcompinfo_init();
         cos_defcompinfo_init_ext(BOOT_CAPTBL_SELF_INITTCAP_BASE, BOOT_CAPTBL_SELF_INITTHD_BASE, 
                                  BOOT_CAPTBL_SELF_INITRCV_BASE, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT,
-                                 BOOT_CAPTBL_SELF_COMP, (vaddr_t)cos_get_heap_ptr(), CHILD_HPET_FREE);
-	sl_init();
+                                 BOOT_CAPTBL_SELF_COMP, (vaddr_t)cos_get_heap_ptr(), CHILD_HIER_FREE);
 
-	//threads[N_TOTALTHDS - 1] = sl_aepthd_init(CHILD_HPET_THD, CHILD_HPET_RCV);
-	//todo - set param..
+	rdtscll(now);
+	b = (now >> 32);
+	c = ((now << 32)>>32);
 
-	//cos_thd_switch(CHILD_HPET_THD);
+	/* sched start time */
+	ret = cos_sinv(CHILD_HIER_SINV, SCHED_STARTTIME, b, c, 0);
+	sched_start_time = now - (cycles_t)ret;
+	
+	ret = cos_sinv(CHILD_HIER_SINV, TASK_STARTTIME, b, c, 0);
+	task_start_time = now - (cycles_t)ret;
+	
+//	i = 4;
+//	test_loop((void *)i);
+
+	sl_init_sync(sched_start_time, task_start_time);
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
 		if (i == HPETRCV_THD) {
@@ -126,7 +138,7 @@ cos_init(void)
 			sndcap = cos_asnd_alloc(ci, sl_thd_aep(threads[i])->rcv, ci->captbl_cap);
 			assert(sndcap);
 
-			ret = cos_sinv(CHILD_HPET_SINV, sndcap, 0, 0, 0);
+			ret = cos_sinv(CHILD_HIER_SINV, HPET_SNDCAP, sndcap, 0, 0);
 			assert(ret == 0);
 		} else {
 			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);

@@ -1010,6 +1010,7 @@ cap_introspect64(struct cos_cpu_local_info *cos_info, struct captbl *ct, capid_t
 
 	switch(ch->type) {
 	case CAP_TCAP: return tcap_introspect64(cos_info, ((struct cap_tcap*)ch)->tcap, op, retval);
+	case CAP_HW:   return hw_introspect64(cos_info, (struct cap_hw*)ch, op, retval);
 	}
 	return -EINVAL;
 }

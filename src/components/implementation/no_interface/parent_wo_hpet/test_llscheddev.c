@@ -12,6 +12,8 @@
 
 #include <sl.h>
 #include "spinner.h"
+#include "hier_layout.h"
+#include "comp_cap_info.h"
 
 #undef assert
 #define assert(node) do { if (unlikely(!(node))) { debug_print("assert error in @ "); *((int *)0) = 0; } } while (0)
@@ -28,6 +30,72 @@ microsec_t T_array[N_TESTTHDS0] = { 10, 30, 40};
 microsec_t C_array[N_TESTTHDS0] = { 1, 3, 4,};
 microsec_t W_array[N_TESTTHDS0] = { 990, 2990, 3990}; /* actual spin work in usecs! not including printing and blocking overheads */
 u32_t prio_array[N_TESTTHDS0]   = { 1, 3, 4};
+static asndcap_t child_hpet_asnd = 0;
+
+struct comp_cap_info;
+extern struct cos_compinfo *boot_ci;
+extern struct comp_cap_info new_comp_cap_info[]; 
+
+extern void *__inv_hierchild_serverfn(int a, int b, int c);
+
+int
+hierchild_serverfn(int a, int b, int c)
+{
+	int ret;
+	int spdid = 1;
+	asndcap_t asnd_in_child = a;
+
+	switch(a) {
+	case HPET_SNDCAP:
+	{
+		struct cos_compinfo *ci       = boot_ci;
+		struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
+
+		child_hpet_asnd = cos_cap_cpy(ci, child_ci, CAP_ASND, asnd_in_child);
+		assert(child_hpet_asnd);
+
+		break;
+	}
+	case TASK_STARTTIME:
+	{
+		cycles_t task_start_time = sl_mod_get_task_starttime(), child_now;
+		unsigned int diff;
+
+		child_now = (((u64_t)b)<<32) | ((u64_t)c);
+		diff = (unsigned int)(child_now - task_start_time);
+
+		return diff;
+	}
+	case SCHED_STARTTIME:
+	{
+		cycles_t start_time = sl__globals()->start_time, child_now;
+		unsigned int diff;
+
+		child_now = (((u64_t)b)<<32) | ((u64_t)c);
+		diff = (unsigned int)(child_now - start_time);
+
+		return diff;
+	}
+	default: assert(0);
+	}
+
+	return 0;
+}
+ 
+void
+hier_child_setup(int spdid)
+{
+	int ret;
+	sinvcap_t child_hier_sinv;
+        struct cos_compinfo *ci       = boot_ci;
+        struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
+
+	child_hier_sinv = cos_sinv_alloc(ci, ci->comp_cap, (vaddr_t)__inv_hierchild_serverfn);
+	assert(child_hier_sinv);
+
+	ret = cos_cap_cpy_at(child_ci, CHILD_HIER_SINV, ci, child_hier_sinv);
+	assert(ret == 0);
+}
 
 void
 test_thd_fn(void *data)
@@ -73,6 +141,7 @@ test_llsched_init(void)
 	union sched_param       sp;
 	asndcap_t               snd;
 
+	hier_child_setup(1);
 //	printc("!!FPDS!!\n");
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {

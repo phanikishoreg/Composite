@@ -4,6 +4,9 @@
 #include <boot_deps.h>
 #include <sl.h>
 
+#include "spinner.h"
+#include "hier_layout.h"
+
 #define CHILD_WCET_C   8000 //usecs
 #define CHILD_PERIOD_T 20000 //usecs
 #define CHILD_PRIO     2
@@ -225,8 +228,23 @@ static void
 boot_init_sched(void)
 {
 	int i;
+	int ret;
+	cycles_t start_period = 0;
+	cycles_t s, e;
+	unsigned cycs_per_usec;
 
-	sl_init();
+	cycs_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
+
+	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, BOOT_CAPTBL_SELF_INITRCV_BASE, HPET_PERIOD_USEC)) assert(0);
+	rdtscll(s);
+	rdtscll(e);
+	while (s < e + (cycs_per_usec * HPET_PERIOD_USEC)) rdtscll(s);
+	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
+
+	while ((ret = cos_introspect64(boot_ci, BOOT_CAPTBL_SELF_INITHW_BASE, HW_GET_FIRSTPERIOD, &start_period)) == -EAGAIN) ;
+	if (ret) assert(0);
+
+	sl_init_sync(start_period, 0);
 
 	for (i = 1 ; i <= n_comps ; i++) {
 		union sched_param sp = {.c = {.type = SCHEDP_PRIO, .value = CHILD_PRIO}};

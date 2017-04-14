@@ -19,6 +19,7 @@ static thdid_t thd_start = 0, thd_end = 0;
 #define SL_FPDS_USEC_MAX 1000000
 
 struct ps_list_head threads[SL_FPDS_NPRIOS];
+cycles_t task_start_time = 0;
 
 /* No RR yet */
 void
@@ -30,7 +31,7 @@ sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
 		assert(cycles < (cycles_t)TCAP_RES_MAX);
 		t->expended += (tcap_res_t)cycles;
 
-		if (t->expended >= t->budget) sl_mod_yield(t, NULL);
+		if (t->expended >= t->budget) sl_mod_block(t);//sl_mod_yield(t, NULL);
 	}
 }
 
@@ -234,6 +235,7 @@ void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
 	static cycles_t start_now;
+	cycles_t diff;
 	/*
 	 * TODO: Gets a bit tricky on the order of the params set to validate
 	 *       For now, assume the order param_set(BUDGET)->param_set(WINDOW)->param_set(PRIO)
@@ -258,10 +260,15 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		t->period_usec = v;
 		t->period = sl_usec2cyc(v);
 
+		if (!start_now) start_now = task_start_time;
 		if (!start_now) {
 			start_now = sl_now();
+			diff = start_now - sl__globals()->start_time;
+			
+			start_now += (sl_timeout_period_get() - (diff % sl_timeout_period_get()));
 			//start_now += (sl_timeout_period_get() - (start_now % sl_timeout_period_get()));
 		}
+		if (!task_start_time) task_start_time = start_now;
 		sl_mod_thd_get(t)->wakeup_cycs = start_now;
 #ifdef SL_DEBUG_DEADLINES
 		t->deadline = start_now + t->period;
@@ -291,6 +298,10 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 
 void
 sl_mod_init(void)
+{ sl_mod_init_sync(0); }
+
+void
+sl_mod_init_sync(cycles_t time)
 {
 	int i;
 	struct sl_thd *t;
@@ -301,4 +312,6 @@ sl_mod_init(void)
 	for (i = 0 ; i < SL_FPDS_NPRIOS ; i++) {
 		ps_list_head_init(&threads[i]);
 	}
+
+	task_start_time = time;
 }

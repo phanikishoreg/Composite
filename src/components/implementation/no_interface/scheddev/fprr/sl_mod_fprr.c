@@ -90,3 +90,9 @@ sl_mod_init(void)
 		ps_list_head_init(&threads[i]);
 	}
 }
+
+void
+sl_mod_init_sync(cycles_t time)
+{
+	sl_mod_init();
+}

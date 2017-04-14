@@ -24,6 +24,7 @@ struct edf_heap {
 } edf_heap;
 
 static struct heap *hs = (struct heap *)&edf_heap;
+cycles_t task_start_time = 0;
 
 void
 sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
@@ -53,7 +54,7 @@ sl_mod_schedule(void)
 	td = sl_mod_thd_get(t);
 	if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
 		t->last_period = now;
-		td->budget    += t->budget;
+		//td->budget    += t->budget;
 		t->expended    = 0;
 	}
 
@@ -143,6 +144,23 @@ sl_mod_block(struct sl_thd_policy *t)
 	t->priority  = t->deadline;
 	assert(t->priority <= SL_EDF_DL_LOW);
 	sl_thd_setprio(sl_mod_thd_get(t), t->priority);
+
+//	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
+//		struct cos_aep_info *aep = sl_thd_aep(sl_mod_thd_get(t));
+//		tcap_res_t budget = 0, pbudget = 0;
+//
+//		budget  = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+//		pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);	
+//
+//		if (budget > pbudget) break;
+//		if (budget >= t->budget) break;
+//
+//		if (budget && pbudget <= t->budget) break;
+//		if (budget == 0) {
+//			if (cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) assert(0);
+//		}
+//	}
+
 	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 	t->prio_idx  = -1;
 
@@ -194,6 +212,7 @@ void
 sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned int v)
 {
 	static cycles_t start_now;
+	cycles_t diff;
 
 	assert(type == SCHEDP_WINDOW || type == SCHEDP_BUDGET);
 	if (type == SCHEDP_WINDOW) {
@@ -201,10 +220,15 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		t->period = sl_usec2cyc(t->period_usec);
 
 		/* first deadline. */
+		if (!start_now) start_now = task_start_time;
 		if (!start_now) {
 			start_now = sl_now();
+			diff = start_now - sl__globals()->start_time;
+
+			start_now += (sl_timeout_period_get() - (diff % sl_timeout_period_get()));
 		//	start_now += (sl_timeout_period_get() - (start_now % sl_timeout_period_get()));
 		}
+		if (!task_start_time) task_start_time = start_now;
 		t->deadline = start_now + t->period;
 		sl_mod_thd_get(t)->wakeup_cycs = start_now;
 #ifdef SL_DEBUG_DEADLINES
@@ -247,8 +271,15 @@ __update_idx(void *e, int pos)
 void
 sl_mod_init(void)
 {
+	sl_mod_init_sync(0);
+}
+
+void
+sl_mod_init_sync(cycles_t time)
+{
 	heap_init(hs, SL_EDF_MAX_THDS, __compare_min, __update_idx);
 #ifdef SL_DEBUG_DEADLINES
 	dl_missed = dl_made = 0;
 #endif
+	task_start_time = time;
 }

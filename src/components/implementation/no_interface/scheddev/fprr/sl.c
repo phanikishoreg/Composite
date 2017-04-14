@@ -312,11 +312,12 @@ void
 sl_timeout_period(microsec_t period)
 {
 	cycles_t p = sl_usec2cyc(period);
-	cycles_t now;
+	cycles_t now, diff;
 
 	sl__globals()->period = p;
 	now = sl_now();
-	sl_timeout_oneshot(now + (p - (now % p)));
+	diff = now - sl__globals()->start_time;
+	sl_timeout_oneshot(now + p + (p - (diff % p)));
 	//sl_timeout_relative(p);
 }
 
@@ -327,6 +328,10 @@ sl_idle(void *d)
 
 void
 sl_init(void)
+{ sl_init_sync(0, 0); }
+
+void
+sl_init_sync(cycles_t start, cycles_t task_start)
 {
 	struct sl_global       *g  = sl__globals();
 	struct cos_defcompinfo *ci = cos_defcompinfo_curr_get();
@@ -338,10 +343,11 @@ sl_init(void)
 	g->cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 	g->lock.u.v     = 0;
 	g->sched_tok    = 0;
+	g->start_time   = start;
 
 	sl_thd_init_backend();
 	sl_aep_init();
-	sl_mod_init();
+	sl_mod_init_sync(task_start);
 	sl_timeout_mod_init();
 
 	/* init a aep struct for scheduler thread */
@@ -359,6 +365,7 @@ sl_init(void)
 	assert(g->idle_thd);
 
 	return;
+
 }
 
 void
@@ -371,7 +378,7 @@ sl_sched_loop(void)
 		int pending, ret;
 		rcv_flags_t rf_def = 0, rf_use;
 
-		rf_use = rf_def; // | RCV_NON_BLOCKING;
+		rf_use = rf_def | RCV_NON_BLOCKING;
 		do {
 			thdid_t        tid;
 			int            blocked, rcvd;
@@ -390,8 +397,8 @@ retry_rcv:
 			if (pending == -EAGAIN) {
 //				rf_use = rf_def;
 //				sl_print("j");
-				//break;
-				continue;
+				break;
+				//continue;
 			}
 			if (!tid) { 
 				sl_print("i");

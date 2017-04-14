@@ -35,74 +35,64 @@ struct comp_cap_info;
 extern struct cos_compinfo *boot_ci;
 extern struct comp_cap_info new_comp_cap_info[]; 
 
-extern void *__inv_hpetasnd_serverfn(int a, int b, int c);
+extern void *__inv_hierchild_serverfn(int a, int b, int c);
 
 int
-hpetasnd_serverfn(int a, int b, int c)
+hierchild_serverfn(int a, int b, int c)
 {
 	int ret;
 	int spdid = 1;
 	asndcap_t asnd_in_child = a;
 
-//	printc("hpetasnd_serverfn");
-        struct cos_compinfo *ci       = boot_ci;
-        struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
-	
-	child_hpet_asnd = cos_cap_cpy(ci, child_ci, CAP_ASND, asnd_in_child);
-	assert(child_hpet_asnd);
+	switch(a) {
+	case HPET_SNDCAP:
+	{
+		struct cos_compinfo *ci       = boot_ci;
+		struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
+
+		child_hpet_asnd = cos_cap_cpy(ci, child_ci, CAP_ASND, asnd_in_child);
+		assert(child_hpet_asnd);
+
+		break;
+	}
+	case TASK_STARTTIME:
+	{
+		cycles_t task_start_time = sl_mod_get_task_starttime(), child_now;
+		unsigned int diff;
+
+		child_now = (((u64_t)b)<<32) | ((u64_t)c);
+		diff = (unsigned int)(child_now - task_start_time);
+
+		return diff;
+	}
+	case SCHED_STARTTIME:
+	{
+		cycles_t start_time = sl__globals()->start_time, child_now;
+		unsigned int diff;
+
+		child_now = (((u64_t)b)<<32) | ((u64_t)c);
+		diff = (unsigned int)(child_now - start_time);
+
+		return diff;
+	}
+	default: assert(0);
+	}
 
 	return 0;
 }
  
-//void
-//child_hpet_fn(void *d)
-//{
-//		printc("@");
-//	while (1) {
-//		cos_rcv(CHILD_HPET_RCV, 0, NULL);
-//
-//		printc("@");
-//		//wtf..
-//	}
-//}
-
 void
 hier_child_setup(int spdid)
 {
 	int ret;
-//	thdcap_t child_hpet_thd;
-//	tcap_t child_hpet_tcap;
-//	arcvcap_t child_hpet_rcv;
-	sinvcap_t child_hpet_sinv;
+	sinvcap_t child_hier_sinv;
         struct cos_compinfo *ci       = boot_ci;
         struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
 
-//	child_hpet_thd = cos_thd_alloc(ci, child_ci->comp_cap, child_hpet_fn, NULL);
-//	assert(child_hpet_thd);
-//
-//	ret = cos_cap_cpy_at(child_ci, CHILD_HPET_THD, ci, child_hpet_thd);
-//	assert(ret == 0);
-///*
-//	child_hpet_tcap = cos_tcap_alloc(ci);
-//	assert(child_hpet_tcap);
-//*/
-//	child_hpet_tcap = sl_thd_aep(new_comp_cap_info[spdid].t)->tc;
-//
-//	child_hpet_rcv = cos_arcv_alloc(ci, child_hpet_thd, child_hpet_tcap, child_ci->comp_cap, sl_thd_aep(new_comp_cap_info[spdid].t)->rcv);
-//	assert(child_hpet_rcv);
-//	ret = cos_cap_cpy_at(child_ci, CHILD_HPET_TCAP, ci, child_hpet_tcap);
-//	assert(ret == 0);
-//
-//	ret = cos_cap_cpy_at(child_ci, CHILD_HPET_RCV, ci, child_hpet_rcv);
-//	assert(ret == 0);
-//
-//	child_hpet_asnd = cos_asnd_alloc(ci, child_hpet_rcv, ci->captbl_cap);
-//	assert(child_hpet_asnd);
+	child_hier_sinv = cos_sinv_alloc(ci, ci->comp_cap, (vaddr_t)__inv_hierchild_serverfn);
+	assert(child_hier_sinv);
 
-	child_hpet_sinv = cos_sinv_alloc(ci, ci->comp_cap, (vaddr_t)__inv_hpetasnd_serverfn);
-	assert(child_hpet_sinv);
-
-	ret = cos_cap_cpy_at(child_ci, CHILD_HPET_SINV, ci, child_hpet_sinv);
+	ret = cos_cap_cpy_at(child_ci, CHILD_HIER_SINV, ci, child_hier_sinv);
 	assert(ret == 0);
 }
 

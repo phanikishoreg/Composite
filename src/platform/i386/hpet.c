@@ -94,6 +94,8 @@ static int timer_calibration_init = 1;
 static unsigned long timer_cycles_per_hpetcyc = TIMER_ERROR_BOUND_FACTOR;
 static unsigned long cycles_per_tick;
 static unsigned long hpetcyc_per_tick;
+static unsigned long periodicity_curr = 0;
+static cycles_t first_hpet_period = 0;
 #define ULONG_MAX 4294967295UL
 
 static inline u64_t
@@ -184,6 +186,9 @@ periodic_handler(struct pt_regs *regs)
 	if (unlikely(timer_calibration_init)) timer_calibration();
 
 	ack_irq(HW_PERIODIC);
+	if (periodicity_curr && !first_hpet_period) {
+		rdtscll(first_hpet_period);
+	}
 //	if (!timer_calibration_init) {
 //		counter ++;
 //		if (!(counter % 100)) printk(" !%d! ", counter);
@@ -273,19 +278,33 @@ timer_find_hpet(void *timer)
 void
 chal_hpet_periodic_set(unsigned long usecs_period)
 {
-	unsigned long tick_multiple = usecs_period / TIMER_DEFAULT_US_INTERARRIVAL;
-	cycles_t hpetcyc_per_period = hpetcyc_per_tick * tick_multiple;
+	if (periodicity_curr != usecs_period) {
+		timer_disable(0);
+		timer_disable(0);
 
-	assert(timer_calibration_init == 0);
-	//printk("Timer tick multiple: %lu usecs:%lu hpetcycs:%llu\n", tick_multiple, usecs_period, hpetcyc_per_period);
-	timer_set(TIMER_PERIODIC, hpetcyc_per_period);
+		periodicity_curr = 0;
+	}
+
+	if (periodicity_curr == 0) {
+		unsigned long tick_multiple = usecs_period / TIMER_DEFAULT_US_INTERARRIVAL;
+		cycles_t hpetcyc_per_period = hpetcyc_per_tick * tick_multiple;
+
+		assert(timer_calibration_init == 0);
+		periodicity_curr = usecs_period;
+		timer_set(TIMER_PERIODIC, hpetcyc_per_period);
+		first_hpet_period = 0;
+	}
 }
+
+cycles_t
+chal_hpet_first_period(void)
+{ return first_hpet_period; }
 
 void
 chal_hpet_disable(void)
 {
-	timer_disable(0);
-	timer_disable(0);
+//	timer_disable(0);
+//	timer_disable(0);
 }
 
 void

@@ -12,6 +12,10 @@ struct sl_thd_policy {
 	struct ps_list list;
 };
 
+static inline cycles_t
+sl_mod_get_task_starttime(void)
+{ return 0; }
+
 static inline struct sl_thd *
 sl_mod_thd_get(struct sl_thd_policy *tp)
 { return &tp->thd; }
