@@ -18,10 +18,28 @@ enum child_hier_layout {
 
 	CHILD_HIER_SINV = BOOT_CAPTBL_FREE,
 	CHILD_HIER_FREE = round_up_to_pow2(CHILD_HIER_SINV + CAP32B_IDSZ, CAPMAX_ENTRY_SZ),
-//	CHILD_HPET_THD = BOOT_CAPTBL_FREE,
-//	CHILD_HPET_TCAP = round_up_to_pow2(CHILD_HPET_THD + CAP16B_IDSZ, CAPMAX_ENTRY_SZ),
-//	CHILD_HPET_RCV = round_up_to_pow2(CHILD_HPET_TCAP + CAP16B_IDSZ, CAPMAX_ENTRY_SZ), 
-//	CHILD_HPET_FREE = round_up_to_pow2(CHILD_HPET_RCV + CAP64B_IDSZ, CAPMAX_ENTRY_SZ),
 };
+
+#define N_PARENT_THDS0 3 /* includes hpet in parent */
+#define N_PARENT_THDS (N_PARENT_THDS0 - 1) /* other than child sched thd.*/
+#define N_CHILD_THDS 2
+
+#define HPET_IN_CHILD 0
+#define HPET_IN_PARENT (N_PARENT_THDS0 - 1)
+
+#define MS_TO_US(m) (m*1000)
+
+#define CHILD_PERIOD_T 20000 //usecs
+#define CHILD_WCET_C   8000 //usecs
+#define CHILD_PRIO     2
+
+static microsec_t parent_thds_T[N_PARENT_THDS0] = { 10, 30};
+static microsec_t parent_thds_C[N_PARENT_THDS0] = { 2, 4};
+static microsec_t parent_thds_W[N_PARENT_THDS0] = { 1990, 3990};
+static microsec_t parent_thds_Prio[N_PARENT_THDS0] = { 1, 3};
+
+static microsec_t child_thds_T[N_CHILD_THDS] = { 40, 60};
+static microsec_t child_thds_C[N_CHILD_THDS] = { 6, 10};
+static microsec_t child_thds_W[N_CHILD_THDS] = { 5990, 9990};
 
 #endif /* HIER_LAYOUT_H */

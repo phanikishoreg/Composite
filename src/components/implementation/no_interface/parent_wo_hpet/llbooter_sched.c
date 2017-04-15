@@ -7,10 +7,6 @@
 #include "spinner.h"
 #include "hier_layout.h"
 
-#define CHILD_WCET_C   8000 //usecs
-#define CHILD_PERIOD_T 20000 //usecs
-#define CHILD_PRIO     2
-
 /*Component init info*/
 #define INIT_STR_SZ 52
 struct component_init_str {

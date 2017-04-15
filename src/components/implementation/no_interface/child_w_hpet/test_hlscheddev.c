@@ -52,15 +52,6 @@ printc(char *fmt, ...)
 
 #undef STANDALONE_TEST
 
-#define MS_TO_US(m) (m*1000)
-#define N_TOTALTHDS 4
-#define N_TESTTHDS (2)//N_TOTALTHDS - 1)
-
-#define HPETAEP_THD (0)
-microsec_t T_array[N_TOTALTHDS] = { HPET_PERIOD_USEC/1000, 60, 80, 1000}; /* in ms */
-microsec_t C_array[N_TOTALTHDS] = { 4, 6, 8, 200}; /* in ms */
-microsec_t W_array[N_TOTALTHDS] = { 3900, 5990, 7990, 190}; /* in usecs, actual spin work! not including printing, blocking overheads */
-
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
 {
@@ -73,11 +64,11 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 	cycles_t             now;
 	int counter = 0;
 
-	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
+	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(child_thds_T[HPET_IN_CHILD]))) assert(0);
 
 	sl_mod_block(sl_mod_thd_policy_get(t));
 	while (1) {
-		microsec_t workusecs = W_array[(int)data];
+		microsec_t workusecs = child_thds_W[(int)data];
 		rcv_flags_t flg = 0;
 		int rcvd = 0;
 		int ret, missed = 0;
@@ -130,7 +121,7 @@ test_thd_fn(void *data)
 
 	while (1) {
 		int missed = 0;
-		microsec_t workusecs = W_array[(int)data];
+		microsec_t workusecs = child_thds_W[(int)data];
 	
 		spin_usecs(workusecs);
 		//missed = spin_usecs_dl(workusecs, tp->deadline);
@@ -150,6 +141,7 @@ test_thd_fn(void *data)
 void
 test_loop(void *data)
 {
+	assert (0);
 	thdid_t ctid = cos_thdid();
 	while (1) {
 		cycles_t now, prev;
@@ -157,7 +149,7 @@ test_loop(void *data)
 		thdid_t tid;
 		int pending, rcvd, blocked;
 		rcv_flags_t rf_use = 0;
-		microsec_t workusecs = W_array[(int)data];
+		microsec_t workusecs = child_thds_W[(int)data];
 
 		pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf_use, &rcvd, &tid, &blocked, &cycles);
 	
@@ -178,7 +170,7 @@ cos_init(void)
 	int                     i, ret;
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
-	struct sl_thd          *threads[N_TESTTHDS];
+	struct sl_thd          *threads[N_CHILD_THDS];
 	union sched_param       sp;
 	cycles_t                sched_start_time, task_start_time, now;
 	unsigned int b = 0, c = 0;
@@ -213,8 +205,8 @@ cos_init(void)
 	sl_init();
 #endif
 
-	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		if (i == HPETAEP_THD) {
+	for (i = 0 ; i < N_CHILD_THDS ; i++) {
+		if (i == HPET_IN_CHILD) {
 			threads[i] = sl_aepthd_alloc(test_hpetaep_fn, (void *)i);
 			//threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
 			//				  sl_thd_aep(sl__globals()->sched_thd)->tc);
@@ -223,20 +215,20 @@ cos_init(void)
 			ret = cos_sinv(CHILD_HIER_SINV, HPET_RCVCAP, sl_thd_aep(threads[i])->rcv, 0, 0);
 
 			sp.c.type  = SCHEDP_WINDOW;
-			sp.c.value = MS_TO_US(T_array[i]);
+			sp.c.value = MS_TO_US(child_thds_T[i]);
 			sl_thd_param_set(threads[i], sp.v);
 			
 			sp.c.type  = SCHEDP_BUDGET;
-			sp.c.value = MS_TO_US(C_array[i]);
+			sp.c.value = MS_TO_US(child_thds_C[i]);
 			sl_thd_param_set(threads[i], sp.v);
 
-			assert(MS_TO_US(T_array[i]) == HPET_PERIOD_USEC);
+			assert(MS_TO_US(child_thds_T[i]) == HPET_PERIOD_USEC);
 		} else {
 			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
 			assert(threads[i]);
 
 			sp.c.type  = SCHEDP_WINDOW;
-			sp.c.value = MS_TO_US(T_array[i]);
+			sp.c.value = MS_TO_US(child_thds_T[i]);
 			sl_thd_param_set(threads[i], sp.v);
 		}
 	}
