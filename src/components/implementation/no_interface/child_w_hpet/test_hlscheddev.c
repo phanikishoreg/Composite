@@ -55,7 +55,6 @@ printc(char *fmt, ...)
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
 {
-	int first = 1;
 	struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
 	struct sl_thd       *t   = sl_thd_curr();
 	struct sl_thd_policy *tp = sl_mod_thd_policy_get(t);
@@ -66,7 +65,6 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 
 	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(child_thds_T[HPET_IN_CHILD]))) assert(0);
 
-	sl_mod_block(sl_mod_thd_policy_get(t));
 	while (1) {
 		microsec_t workusecs = child_thds_W[(int)data];
 		rcv_flags_t flg = 0;
@@ -74,14 +72,15 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 		int ret, missed = 0;
 		int pending;
 
-//		if (!first && (ret = cos_tcap_transfer(aep->rcv, aep->tc, 0, t->prio))) {
+                tp->deadline += tp->period;
+                tp->priority  = tp->deadline;
+                sl_thd_setprio(t, tp->priority);
+//		if ((ret = cos_tcap_transfer(aep->rcv, aep->tc, 0, t->prio))) {
 //			printc("ret=%d", ret);
 //			assert(0);
 //		}
-//		first = 0;
+		cos_deftransfer_aep(aep, 1, t->prio);
 		pending = cos_rcv(rcv, flg, &rcvd);
-//		sl_mod_wakeup(sl_mod_thd_policy_get(t));
-		//sl_mod_thd_policy_get(t)->missed += (rcvd - 1);
 		missed = spin_usecs_dl(workusecs, tp->deadline);
 	//	spin_usecs(workusecs);
 #ifdef SL_DEBUG_DEADLINES
@@ -91,22 +90,15 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 			dl_missed += rcvd;
 			tp->missed += rcvd;
 		}
-//		if (missed) {
-//			dl_missed ++;
-//			tp->missed ++;
-//		} else {
-//			dl_made ++;
-//			tp->made ++;
-//		}
+		if (missed) {
+			dl_missed ++;
+			tp->missed ++;
+		} else {
+			dl_made ++;
+			tp->made ++;
+		}
 #endif
-//		counter ++;
-//		if (counter > 15) {
-//			cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
-//			while (1);
-//		} 
-
-		//printc("h=%u:%d", tid, rcvd);
-	//	sl_mod_block(sl_mod_thd_policy_get(t));
+		sl_thd_yield(0);
 	}
 
 	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);

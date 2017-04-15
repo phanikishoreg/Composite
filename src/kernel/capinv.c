@@ -1649,7 +1649,6 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 
 			ret = tcap_delegate(tc, tcapsrc->tcap, res, prio);
 			if (unlikely(ret)) {
-				printk("%s:%d\n", __func__, __LINE__);
 				cos_throw(err, ret);
 			}
 

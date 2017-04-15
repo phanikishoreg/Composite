@@ -119,7 +119,7 @@ sl_mod_block(struct sl_thd_policy *t)
 
 	rdtscll(now);
 
-	/*if (sl_mod_thd_get(t)->type != SL_THD_AEP_TCAP)*/ {
+	if (sl_mod_thd_get(t)->type != SL_THD_AEP_TCAP) {
 		if (now <= t->deadline) {
 			t->made ++;
 			dl_made ++;
@@ -154,26 +154,31 @@ sl_mod_block(struct sl_thd_policy *t)
 #endif
 
 	if (t->prio_idx > -1) heap_remove(hs, t->prio_idx);
-	t->deadline += t->period;
-	t->priority  = t->deadline;
-	assert(t->priority <= SL_EDF_DL_LOW);
-	sl_thd_setprio(sl_mod_thd_get(t), t->priority);
+	if (sl_mod_thd_get(t)->type != SL_THD_AEP_TCAP) {
+		t->deadline += t->period;
+		t->priority  = t->deadline;
+		assert(t->priority <= SL_EDF_DL_LOW);
+		sl_thd_setprio(sl_mod_thd_get(t), t->priority);
+	} else {
+		/* prio and deadline are updated in the thread right before COS_RCV!*/
+		cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), 1, sl_mod_thd_get(t)->prio);
+	}
 
-	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
-		struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
-		struct cos_aep_info *aep = sl_thd_aep(sl_mod_thd_get(t));
+//	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
+//		struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
+//		struct cos_aep_info *aep = sl_thd_aep(sl_mod_thd_get(t));
 //		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);	
 //		tcap_res_t budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
 //		assert(t->period != 0);
-
+//
 //		if (budget == 0) {
 //			if (pbudget && cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), pbudget / 4, sl_mod_thd_get(t)->prio)) assert(0);
 //		} else {
-			//if (cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), 2, sl_mod_thd_get(t)->prio)) assert(0);
-			if (cos_tcap_transfer(aep->rcv, aep->tc, 0, sl_mod_thd_get(t)->prio)) assert(0);
-			
+//      		//if (cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), 2, sl_mod_thd_get(t)->prio)) assert(0);
+//      		if (cos_tcap_transfer(aep->rcv, aep->tc, 0, sl_mod_thd_get(t)->prio)) assert(0);
+//      		
 //		}
-
+//
 //		struct cos_aep_info *aep = sl_thd_aep(sl_mod_thd_get(t));
 //		tcap_res_t budget = 0, pbudget = 0;
 //
@@ -185,7 +190,7 @@ sl_mod_block(struct sl_thd_policy *t)
 //		if (budget == 0) {
 //			if (cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) assert(0);
 //		}
-	}
+//	}
 
 	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 	t->prio_idx  = -1;
