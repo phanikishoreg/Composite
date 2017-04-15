@@ -792,22 +792,22 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 
 	cursch = tcap_rcvcap_thd(tcap);
 	ntc = thd_rcvcap_next_tcap(cursch);
-//	if (ntc && ntc != tcap_next) {
-//		int ret;
-//		tcap_prio_t tmpprio = tcap_sched_info(ntc)->prio;
-//
-//		nto = thd_rcvcap_next_timeout(cursch);
-//		ntp = thd_rcvcap_next_tcap_prio(cursch);
-//
-//		tcap_setprio(ntc, ntp);
-//		ret = tcap_higher_prio(ntc, tcap_next);
-//		tcap_setprio(ntc, tmpprio);
-//
-//		if (ret) {
-//			timeout = ntp;
-//		}
-//	}
-//
+	if (ntc && ntc != tcap_next) {
+		int ret;
+		tcap_prio_t tmpprio = tcap_sched_info(ntc)->prio;
+
+		nto = thd_rcvcap_next_timeout(cursch);
+		ntp = thd_rcvcap_next_tcap_prio(cursch);
+
+		tcap_setprio(ntc, ntp);
+		ret = tcap_higher_prio(ntc, tcap_next);
+		tcap_setprio(ntc, tmpprio);
+
+		if (ret) {
+			timeout = ntp;
+		}
+	}
+
 	print_this = 1;
 	return cap_switch(regs, thd, next, tcap_next, timeout, NULL, ci, cos_info);
 }

@@ -50,14 +50,16 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
+#undef STANDALONE_TEST
+
 #define MS_TO_US(m) (m*1000)
 #define N_TOTALTHDS 4
-#define N_TESTTHDS (3)//N_TOTALTHDS - 1)
+#define N_TESTTHDS (2)//N_TOTALTHDS - 1)
 
-#define HPETAEP_THD (10)
+#define HPETAEP_THD (0)
 microsec_t T_array[N_TOTALTHDS] = { HPET_PERIOD_USEC/1000, 60, 80, 1000}; /* in ms */
 microsec_t C_array[N_TOTALTHDS] = { 4, 6, 8, 200}; /* in ms */
-microsec_t W_array[N_TOTALTHDS] = { 3900, 5900, 7900, 190}; /* in usecs, actual spin work! not including printing, blocking overheads */
+microsec_t W_array[N_TOTALTHDS] = { 3900, 5990, 7990, 190}; /* in usecs, actual spin work! not including printing, blocking overheads */
 
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
@@ -69,26 +71,51 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 	struct cos_aep_info *aep = sl_thd_aep(t);
 	thdid_t              tid = t->thdid;
 	cycles_t             now;
+	int counter = 0;
 
-//	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
+	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
 
+	sl_mod_block(sl_mod_thd_policy_get(t));
 	while (1) {
 		microsec_t workusecs = W_array[(int)data];
-		rcv_flags_t flg = RCV_ALL_PENDING;
-		int rcvd;
-		int ret;
+		rcv_flags_t flg = 0;
+		int rcvd = 0;
+		int ret, missed = 0;
+		int pending;
 
-		if (!first && (ret = cos_tcap_transfer(aep->rcv, aep->tc, 0, t->prio))) {
-			printc("ret=%d", ret);
-			assert(0);
-		}
-		first = 0;
-		cos_rcv(rcv, flg, &rcvd);
+//		if (!first && (ret = cos_tcap_transfer(aep->rcv, aep->tc, 0, t->prio))) {
+//			printc("ret=%d", ret);
+//			assert(0);
+//		}
+//		first = 0;
+		pending = cos_rcv(rcv, flg, &rcvd);
+//		sl_mod_wakeup(sl_mod_thd_policy_get(t));
 		//sl_mod_thd_policy_get(t)->missed += (rcvd - 1);
-		spin_usecs(workusecs);
+		missed = spin_usecs_dl(workusecs, tp->deadline);
+	//	spin_usecs(workusecs);
+#ifdef SL_DEBUG_DEADLINES
+		if (rcvd > 1) {
+			printc("R:%d", rcvd);
+			rcvd --;
+			dl_missed += rcvd;
+			tp->missed += rcvd;
+		}
+//		if (missed) {
+//			dl_missed ++;
+//			tp->missed ++;
+//		} else {
+//			dl_made ++;
+//			tp->made ++;
+//		}
+#endif
+//		counter ++;
+//		if (counter > 15) {
+//			cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
+//			while (1);
+//		} 
 
 		//printc("h=%u:%d", tid, rcvd);
-		//sl_mod_block(sl_mod_thd_policy_get(t));
+	//	sl_mod_block(sl_mod_thd_policy_get(t));
 	}
 
 	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
@@ -105,7 +132,8 @@ test_thd_fn(void *data)
 		int missed = 0;
 		microsec_t workusecs = W_array[(int)data];
 	
-		missed = spin_usecs_dl(workusecs, tp->deadline);
+		spin_usecs(workusecs);
+		//missed = spin_usecs_dl(workusecs, tp->deadline);
 #ifdef SL_DEBUG_DEADLINES
 //		if (missed) {
 //			dl_missed ++;
@@ -154,6 +182,9 @@ cos_init(void)
 	union sched_param       sp;
 	cycles_t                sched_start_time, task_start_time, now;
 	unsigned int b = 0, c = 0;
+	cycles_t cycles;
+	thdid_t tid;
+	int rcvd, blocked;
 
 //	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
@@ -162,6 +193,7 @@ cos_init(void)
                                  BOOT_CAPTBL_SELF_INITRCV_BASE, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT,
                                  BOOT_CAPTBL_SELF_COMP, (vaddr_t)cos_get_heap_ptr(), CHILD_HIER_FREE);
 
+#ifndef STANDALONE_TEST
 	rdtscll(now);
 	b = (now >> 32);
 	c = ((now << 32)>>32);
@@ -177,6 +209,9 @@ cos_init(void)
 //	test_loop((void *)i);
 
 	sl_init_sync(sched_start_time, task_start_time);
+#else
+	sl_init();
+#endif
 
 	for (i = 0 ; i < N_TESTTHDS ; i++) {
 		if (i == HPETAEP_THD) {
@@ -184,6 +219,8 @@ cos_init(void)
 			//threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
 			//				  sl_thd_aep(sl__globals()->sched_thd)->tc);
 			assert(threads[i]);
+
+			ret = cos_sinv(CHILD_HIER_SINV, HPET_RCVCAP, sl_thd_aep(threads[i])->rcv, 0, 0);
 
 			sp.c.type  = SCHEDP_WINDOW;
 			sp.c.value = MS_TO_US(T_array[i]);
@@ -194,7 +231,6 @@ cos_init(void)
 			sl_thd_param_set(threads[i], sp.v);
 
 			assert(MS_TO_US(T_array[i]) == HPET_PERIOD_USEC);
-			if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, sl_thd_aep(threads[i])->rcv, MS_TO_US(T_array[i]))) assert(0);
 		} else {
 			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
 			assert(threads[i]);
@@ -205,6 +241,14 @@ cos_init(void)
 		}
 	}
 
+#ifndef STANDALONE_TEST
+	/* Because of boot up scheduling.. I'm sure there are events in the queue! Clear them! */
+	cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, RCV_ALL_PENDING, &rcvd, &tid, &blocked, &cycles);
+
+	ret = cos_sinv(CHILD_HIER_SINV, CHILD_BOOTUP_DONE, 0, 0, 0);
+#endif
+//	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, sl_thd_aep(threads[HPETAEP_THD])->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
+	
 	sl_sched_loop();
 
 	assert(0);

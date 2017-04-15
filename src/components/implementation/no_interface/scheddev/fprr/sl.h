@@ -69,6 +69,7 @@ struct sl_global {
 	cycles_t       timer_next;
 	tcap_time_t    timeout_next;
 	sl_sched_tok_t sched_tok;
+	rcv_flags_t    sched_flags;
 };
 
 extern struct sl_global sl_global_data;
@@ -240,6 +241,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 	aep = sl_thd_aep(t);
 	assert(aep);
 
+	if (sl_thd_curr() == t) return 0;
 	//printc("#%u=>%u#", cos_thdid(), t->thdid);
 	sl_print("A0=%u ", t->thdid);
 	switch (t->type) {
@@ -354,12 +356,15 @@ sl_cs_exit_schedule_nospin(void)
 	 */
 	pt     = sl_mod_schedule();
 	if (unlikely(!pt)) {
+	//	t = sl__globals()->sched_thd;
 		t = sl__globals()->idle_thd;
+	//	sl__globals()->sched_flags = RCV_ALL_PENDING;
 	}
 	else {
 		t = sl_mod_thd_get(pt);
 		repl = t->budget;
 		t->budget = 0;
+	//	sl__globals()->sched_flags = RCV_ALL_PENDING | RCV_NON_BLOCKING;
 		
 		if (repl) {
 			struct cos_aep_info *aep = sl_thd_aep(t);
@@ -376,19 +381,20 @@ sl_cs_exit_schedule_nospin(void)
 		sltok = __sync_add_and_fetch(&globals->sched_tok, 1);
 //		sltok = globals->sched_tok;
 		sl_print(" K:%llu ", sltok);
-	//	if (budget) {
+		sl_mod_block(sl_mod_thd_policy_get(t));
+		if (budget) {
 	//		sl_print("A5\n");
-	//		if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
-	//	} else {
+			if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
+		} else {
 	//		sl_print("A4\n");
-	//		cos_asnd(t->sndcap, 1);
-	//	}
+			cos_asnd(t->sndcap, 1);
+		}
 	} else if (t->type == SL_THD_AEP_TCAP && budget) {
 		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
 
 		if (pbudget < budget) budget = pbudget;
-		if (budget && cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) ;
-		else t->budget -= budget;
+		if (budget && cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) assert(0);
+		//else t->budget -= budget;
 	}
 	ht = sl_timeout_mod_block_peek();
 	if (ht) { // && ht->wakeup_cycs < (now + sl_usec2cyc(200))) {
@@ -398,6 +404,7 @@ sl_cs_exit_schedule_nospin(void)
 
 	sl_cs_exit();
 
+	if (t->type == SL_THD_CHILD_SCHED) return 0;
 	return sl_thd_activate(t, tok, budget, sltok, hitc, hiprio);
 }
 
@@ -417,6 +424,8 @@ int sl_thd_block_cs(struct sl_thd *t);
 void sl_thd_wakeup(thdid_t tid);
 int sl_thd_wakeup_cs(struct sl_thd *t);
 void sl_thd_yield(thdid_t tid);
+
+struct sl_thd *sl_childsched_get(void);
 
 /* The entire thread allocation and free API */
 struct sl_thd *sl_thd_alloc(cos_thd_fn_t fn, void *data);

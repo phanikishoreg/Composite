@@ -244,6 +244,8 @@ boot_init_sched(void)
 	while ((ret = cos_introspect64(boot_ci, BOOT_CAPTBL_SELF_INITHW_BASE, HW_GET_FIRSTPERIOD, &start_period)) == -EAGAIN) ;
 	if (ret) assert(0);
 
+//	start_period -= cycs_per_usec * 10000;
+
 	sl_init_sync(start_period, 0);
 
 	for (i = 1 ; i <= n_comps ; i++) {

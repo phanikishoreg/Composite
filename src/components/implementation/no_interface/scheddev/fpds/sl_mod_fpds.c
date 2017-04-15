@@ -31,7 +31,10 @@ sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
 		assert(cycles < (cycles_t)TCAP_RES_MAX);
 		t->expended += (tcap_res_t)cycles;
 
-		if (t->expended >= t->budget) sl_mod_block(t);//sl_mod_yield(t, NULL);
+		if (t->expended >= t->budget) {
+			t->expended = 0;
+			sl_mod_block(t);//sl_mod_yield(t, NULL);
+		}
 	}
 }
 
@@ -77,7 +80,7 @@ sl_mod_schedule(void)
 		/* if this thread is using DS budget server and we have reached/passed replenishment period */
 		if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
 			t->last_period = now;
-			td->budget     = t->budget;
+			td->budget     = t->budget + sl_usec2cyc(10);
 			t->expended    = 0;
 		}
 
@@ -110,7 +113,7 @@ sl_mod_deadlines(void)
 			struct sl_thd_policy *tdp = sl_mod_thd_policy_get(td);
 			//sprintc(buf + strlen(buf), " %u:%lu:%lu ", td->thdid, tdp->made, tdp->missed);
 
-			if (td->thdid != (sl__globals()->idle_thd)->thdid)
+			if ((td->thdid != (sl__globals()->idle_thd)->thdid) && td->type != SL_THD_CHILD_SCHED)
 				sl_mod_print(" pt%u:%ld:%ld ", td->thdid, tdp->made, tdp->missed);
 
 			tmp ++;
@@ -272,7 +275,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		sl_mod_thd_get(t)->wakeup_cycs = start_now;
 #ifdef SL_DEBUG_DEADLINES
 		t->deadline = start_now + t->period;
-//		printc(" %u:%llu:%llu ", sl_mod_thd_get(t)->thdid, t->deadline, t->period);
+		printc("Thd:%u Dl:%llu P:%llu Wkup:%llu\n", sl_mod_thd_get(t)->thdid, t->deadline, t->period, sl_mod_thd_get(t)->wakeup_cycs);
 		prev = start_now;
 #endif
 
@@ -283,6 +286,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		assert(v >= SL_FPDS_USEC_MIN && v <= SL_FPDS_USEC_MAX);
 		t->budget_usec = v;
 		t->budget = (tcap_res_t)sl_usec2cyc(v);
+		//t->budget = 0;
 
 		break;
 	}

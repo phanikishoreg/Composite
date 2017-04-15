@@ -29,6 +29,7 @@ spin_usecs_dl(microsec_t usecs, cycles_t dl)
 	spin_usecs(usecs);
 	rdtscll(now);
 
+//	printc("NOW:%llu DL:%llu\n", now, dl);
 	if (now > dl) return 1;
 
 	return 0;

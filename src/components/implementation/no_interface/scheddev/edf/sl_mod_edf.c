@@ -34,6 +34,11 @@ sl_mod_execution(struct sl_thd_policy *t, cycles_t cycles)
 	if (t->budget) {
 		assert(cycles < (cycles_t)TCAP_RES_MAX);
 		t->expended += (tcap_res_t)cycles;
+
+		if (t->expended >= t->budget) {
+			t->expended = 0;
+			sl_mod_block(t);
+		}
 	}
 }
 
@@ -54,7 +59,8 @@ sl_mod_schedule(void)
 	td = sl_mod_thd_get(t);
 	if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
 		t->last_period = now;
-		//td->budget    += t->budget;
+		td->budget     = t->budget;
+//		td->budget     = 0;
 		t->expended    = 0;
 	}
 
@@ -97,15 +103,23 @@ sl_mod_deadlines(void)
 void
 sl_mod_block(struct sl_thd_policy *t)
 {
-//	printc("B%u", sl_mod_thd_get(t)->thdid);
-	if (t->prio_idx < 0) return;
+	//printc(" B%u ", sl_mod_thd_get(t)->thdid);
+//	static aep_block_count;
+//	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
+//		aep_block_count ++;
+//		if (aep_block_count > 30) {
+//			cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
+//			while (1);
+//		}
+//	}
+
 #ifdef SL_DEBUG_DEADLINES
 	cycles_t now;
 //	static long print_counter = 0;
 
 	rdtscll(now);
 
-	/*if (sl_mod_thd_get(t)->type != SL_THD_SIMPLE)*/ {
+	/*if (sl_mod_thd_get(t)->type != SL_THD_AEP_TCAP)*/ {
 		if (now <= t->deadline) {
 			t->made ++;
 			dl_made ++;
@@ -139,18 +153,30 @@ sl_mod_block(struct sl_thd_policy *t)
 //	}
 #endif
 
-	heap_remove(hs, t->prio_idx);
+	if (t->prio_idx > -1) heap_remove(hs, t->prio_idx);
 	t->deadline += t->period;
 	t->priority  = t->deadline;
 	assert(t->priority <= SL_EDF_DL_LOW);
 	sl_thd_setprio(sl_mod_thd_get(t), t->priority);
 
-//	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
+	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
+		struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
+		struct cos_aep_info *aep = sl_thd_aep(sl_mod_thd_get(t));
+//		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);	
+//		tcap_res_t budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
+//		assert(t->period != 0);
+
+//		if (budget == 0) {
+//			if (pbudget && cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), pbudget / 4, sl_mod_thd_get(t)->prio)) assert(0);
+//		} else {
+			//if (cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), 2, sl_mod_thd_get(t)->prio)) assert(0);
+			if (cos_tcap_transfer(aep->rcv, aep->tc, 0, sl_mod_thd_get(t)->prio)) assert(0);
+			
+//		}
+
 //		struct cos_aep_info *aep = sl_thd_aep(sl_mod_thd_get(t));
 //		tcap_res_t budget = 0, pbudget = 0;
 //
-//		budget  = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
-//		pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);	
 //
 //		if (budget > pbudget) break;
 //		if (budget >= t->budget) break;
@@ -159,7 +185,7 @@ sl_mod_block(struct sl_thd_policy *t)
 //		if (budget == 0) {
 //			if (cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) assert(0);
 //		}
-//	}
+	}
 
 	debug("block= remove idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 	t->prio_idx  = -1;
@@ -171,7 +197,7 @@ void
 sl_mod_wakeup(struct sl_thd_policy *t)
 {
 	struct sl_thd *th = sl_mod_thd_get(t);
-//	printc("W%u", sl_mod_thd_get(t)->thdid);
+	//printc(" W%u ", sl_mod_thd_get(t)->thdid);
 	//assert(t->prio_idx < 0);
 	if (t->prio_idx >= 0) return;
 
@@ -244,12 +270,16 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		heap_adjust(hs, t->prio_idx);
 		debug("param_set= adjust idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 		sl_thd_setprio(sl_mod_thd_get(t), t->priority);
+		printc("Thd:%u Dl:%llu P:%llu Wkup:%llu\n", sl_mod_thd_get(t)->thdid, t->deadline, t->period, sl_mod_thd_get(t)->wakeup_cycs);
 	} else if (type == SCHEDP_BUDGET) {
+		int ret;
 		t->budget_usec = v;
 		t->budget = sl_usec2cyc(t->budget_usec);
 
 		assert(t->period != 0);
-		if (cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), t->budget, sl_mod_thd_get(t)->prio)) assert(0);
+		if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
+			ret = cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), t->budget, sl_mod_thd_get(t)->prio);
+		}
 		t->last_period = start_now;
 	}
 

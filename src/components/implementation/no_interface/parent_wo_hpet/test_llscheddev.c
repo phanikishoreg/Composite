@@ -23,14 +23,15 @@
 #define SPIN(iters) do { if (iters > 0) { for (; iters > 0 ; iters -- ) ; } else { while (1) ; } } while (0)
 
 #define N_TESTTHDS0 3
-#define N_TESTTHDS 3
+#define N_TESTTHDS 2
 #define MS_TO_US(m)   (m * 1000)
 
 microsec_t T_array[N_TESTTHDS0] = { 10, 30, 40};
-microsec_t C_array[N_TESTTHDS0] = { 1, 3, 4,};
-microsec_t W_array[N_TESTTHDS0] = { 990, 2990, 3990}; /* actual spin work in usecs! not including printing and blocking overheads */
+microsec_t C_array[N_TESTTHDS0] = { 2, 4, 4,};
+microsec_t W_array[N_TESTTHDS0] = { 1990, 3990, 3990}; /* actual spin work in usecs! not including printing and blocking overheads */
 u32_t prio_array[N_TESTTHDS0]   = { 1, 3, 4};
 static asndcap_t child_hpet_asnd = 0;
+static int child_bootup_done = 0;
 
 struct comp_cap_info;
 extern struct cos_compinfo *boot_ci;
@@ -43,16 +44,28 @@ hierchild_serverfn(int a, int b, int c)
 {
 	int ret;
 	int spdid = 1;
-	asndcap_t asnd_in_child = a;
 
 	switch(a) {
 	case HPET_SNDCAP:
 	{
+		asndcap_t asnd_in_child = b;
 		struct cos_compinfo *ci       = boot_ci;
 		struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
 
 		child_hpet_asnd = cos_cap_cpy(ci, child_ci, CAP_ASND, asnd_in_child);
 		assert(child_hpet_asnd);
+
+		break;
+	}
+	case HPET_RCVCAP:
+	{
+		struct cos_compinfo *ci       = boot_ci;
+		struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
+		arcvcap_t child_hpet_rcv, rcv_in_child = b;
+
+		child_hpet_rcv = cos_cap_cpy(ci, child_ci, CAP_ARCV, rcv_in_child);
+		assert(child_hpet_rcv);
+		cos_deftransfer(child_hpet_rcv, sl_usec2cyc(2*1000), sl_childsched_get()->prio); 
 
 		break;
 	}
@@ -75,6 +88,12 @@ hierchild_serverfn(int a, int b, int c)
 		diff = (unsigned int)(child_now - start_time);
 
 		return diff;
+	}
+	case CHILD_BOOTUP_DONE:
+	{
+		child_bootup_done = 1;
+
+		break;
 	}
 	default: assert(0);
 	}
@@ -139,7 +158,8 @@ test_llsched_init(void)
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
 	struct sl_thd          *threads[N_TESTTHDS];
 	union sched_param       sp;
-	asndcap_t               snd;
+	struct sl_thd          *child_thd;
+	cycles_t s, e;
 
 	hier_child_setup(1);
 //	printc("!!FPDS!!\n");
@@ -159,6 +179,25 @@ test_llsched_init(void)
 //	rdtscll(now);
 //	printc("%llu\n", now);
 //	while (1);
+
+	child_thd = sl_childsched_get();
+	assert(child_thd);
+	
+	while (!child_bootup_done) {
+		tcap_res_t child_budget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(child_thd)->tc, TCAP_GET_BUDGET);
+
+		if (child_budget == 0) {
+			if(cos_defdelegate(child_thd->sndcap, (tcap_res_t)sl_usec2cyc(10*1000), child_thd->prio, TCAP_DELEG_YIELD)) assert(0);
+		} else {
+			if(cos_asnd(child_thd->sndcap, 1)) assert(0);
+		}
+	}
+
+	e = sl_mod_get_task_starttime() - sl_usec2cyc(10000);
+
+	rdtscll(s);
+	while (s < e) rdtscll(s);
+	
 	sl_sched_loop();
 
 	assert(0);

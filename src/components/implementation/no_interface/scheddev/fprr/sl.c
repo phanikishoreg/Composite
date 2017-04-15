@@ -12,6 +12,10 @@
 #include <cos_debug.h>
 #include <cos_kernel_api.h>
 
+#ifndef HPET_PERIOD_USEC
+#define HPET_PERIOD_USEC (40*1000)
+#endif
+
 struct sl_global sl_global_data;
 
 /*
@@ -154,6 +158,20 @@ sl_thd_yield(thdid_t tid)
 }
 
 static struct sl_thd *
+sl_childsched_set_or_get(struct sl_thd *ct)
+{
+	static struct sl_thd *child_sched = NULL;
+
+	if (child_sched == NULL && ct) child_sched = ct;
+	
+	return child_sched;
+}
+
+struct sl_thd *
+sl_childsched_get(void)
+{ return sl_childsched_set_or_get(NULL); }
+
+static struct sl_thd *
 sl_thd_alloc_init(thdid_t tid, struct cos_aep_info *aep, asndcap_t snd, sl_thd_type type)
 {
 	struct sl_thd_policy *tp = NULL;
@@ -232,6 +250,8 @@ sl_aepthd_alloc_intern(cos_aepthd_fn_t fn, void *data, tcap_t tc, struct cos_def
 	assert(tid);
 	t = sl_thd_alloc_init(tid, aep, snd, type);
 	sl_mod_thd_create(sl_mod_thd_policy_get(t));
+
+	if (type == SL_THD_CHILD_SCHED) sl_childsched_set_or_get(t);
 done:
 	return t;
 }
@@ -317,8 +337,10 @@ sl_timeout_period(microsec_t period)
 	sl__globals()->period = p;
 	now = sl_now();
 	diff = now - sl__globals()->start_time;
-	sl_timeout_oneshot(now + p + (p - (diff % p)));
+	sl_timeout_oneshot(now + (p - (diff % p)));
 	//sl_timeout_relative(p);
+
+	printc("Curr%u: Start:%llu Next:%llu P:%llu Now:%llu\n", cos_thdid(), sl__globals()->start_time, sl__globals()->timer_next, p, now);
 }
 
 /* engage space heater mode */
@@ -336,6 +358,7 @@ sl_init_sync(cycles_t start, cycles_t task_start)
 	struct sl_global       *g  = sl__globals();
 	struct cos_defcompinfo *ci = cos_defcompinfo_curr_get();
 	struct cos_aep_info *aep;
+	cycles_t tstart;
 
 	/* must fit in a word */
 	assert(sizeof(struct sl_cs) <= sizeof(unsigned long));
@@ -345,9 +368,12 @@ sl_init_sync(cycles_t start, cycles_t task_start)
 	g->sched_tok    = 0;
 	g->start_time   = start;
 
+	if (start == 0 && task_start == 0) tstart = 0;
+	else tstart = (task_start == 0 ? (start + sl_usec2cyc(HPET_PERIOD_USEC * 2)) : task_start);
+
 	sl_thd_init_backend();
 	sl_aep_init();
-	sl_mod_init_sync(task_start);
+	sl_mod_init_sync(tstart);
 	sl_timeout_mod_init();
 
 	/* init a aep struct for scheduler thread */
@@ -360,6 +386,7 @@ sl_init_sync(cycles_t start, cycles_t task_start)
 	assert(g->sched_thd);
 	g->sched_thdcap = BOOT_CAPTBL_SELF_INITTHD_BASE;
 	sl_thd_setprio(g->sched_thd, TCAP_PRIO_MAX);
+	g->sched_flags  = RCV_ALL_PENDING | RCV_NON_BLOCKING;
 
 	g->idle_thd     = sl_thd_alloc(sl_idle, NULL);
 	assert(g->idle_thd);
@@ -378,7 +405,7 @@ sl_sched_loop(void)
 		int pending, ret;
 		rcv_flags_t rf_def = 0, rf_use;
 
-		rf_use = rf_def | RCV_NON_BLOCKING;
+		rf_use = rf_def; // | RCV_NON_BLOCKING;
 		do {
 			thdid_t        tid;
 			int            blocked, rcvd;
@@ -393,7 +420,7 @@ sl_sched_loop(void)
 			 */
 retry_rcv:
 			sl_print("a");
-			pending = cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, rf_use, &rcvd, &tid, &blocked, &cycles);
+			pending = cos_sched_rcv(sched_rcv, sl__globals()->sched_flags, &rcvd, &tid, &blocked, &cycles);
 			if (pending == -EAGAIN) {
 //				rf_use = rf_def;
 //				sl_print("j");
@@ -407,6 +434,7 @@ retry_rcv:
 
 			//printc(" %u:%llu ", sl_thd_curr()->thdid, sl_exec_cycles());
 			sl_print("b=%d,%d,%u,%d,%llu", pending, rcvd, tid, blocked, cycles);
+		//	printc(" %d,%d,%u,%s,%llu ", pending, rcvd, tid, blocked ? "B" : "W", cycles);
 			ret = sl_cs_enter_sched();
 			if (ret == -EBUSY) { 
 			sl_print("c");
@@ -418,10 +446,11 @@ retry_rcv:
 			assert(t);
 
 			sl_mod_execution(sl_mod_thd_policy_get(t), cycles);
-			if (blocked)     { sl_print("B+"); /*sl_thd_block_cs(t);*/ sl_mod_block(sl_mod_thd_policy_get(t)); }
-			/* tcap expended notification will have blocked = 0 and cycles != 0 */
-			else if(!cycles) { sl_print("W+"); /*sl_thd_wakeup_cs(t);*/ sl_mod_wakeup(sl_mod_thd_policy_get(t)); }
-
+			/*if (t->type != SL_THD_AEP_TCAP)*/ {
+				if (blocked)     { sl_print("B+"); /*sl_thd_block_cs(t);*/ sl_mod_block(sl_mod_thd_policy_get(t)); }
+				/* tcap expended notification will have blocked = 0 and cycles != 0 */
+				else if(!cycles) { sl_print("W+"); /*sl_thd_wakeup_cs(t);*/ sl_mod_wakeup(sl_mod_thd_policy_get(t)); }
+			}
 			sl_print("e");
 			sl_cs_exit();
 		} while (pending);
