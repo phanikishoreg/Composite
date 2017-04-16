@@ -76,7 +76,7 @@ sl_mod_deadlines(void)
 
 	rdtscll(now);
 	//if (now - prev > sl_usec2cyc(240 * 1000)) {
-	if (now - prev > sl_usec2cyc(10 * SL_DEBUG_DL_MISS_DIAG_USEC)) {
+	if (now - prev > sl_usec2cyc(SL_DEBUG_DL_MISS_DIAG_USEC)) {
 		thdid_t tmp = thd_start;
 
 		prev = now;

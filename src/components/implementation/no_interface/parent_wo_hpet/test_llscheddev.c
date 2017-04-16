@@ -57,7 +57,7 @@ hierchild_serverfn(int a, int b, int c)
 
 		child_hpet_rcv = cos_cap_cpy(ci, child_ci, CAP_ARCV, rcv_in_child);
 		assert(child_hpet_rcv);
-		cos_deftransfer(child_hpet_rcv, sl_usec2cyc(8*1000), sl_childsched_get()->prio); 
+//		cos_deftransfer(child_hpet_rcv, sl_usec2cyc(8*1000), sl_childsched_get()->prio); 
 
 		break;
 	}
@@ -182,7 +182,7 @@ test_llsched_init(void)
 		tcap_res_t child_budget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(child_thd)->tc, TCAP_GET_BUDGET);
 
 		if (child_budget == 0) {
-			if(cos_defdelegate(child_thd->sndcap, (tcap_res_t)sl_usec2cyc(10*1000), child_thd->prio, TCAP_DELEG_YIELD)) assert(0);
+			if(cos_defdelegate(child_thd->sndcap, (tcap_res_t)sl_usec2cyc(5*1000), child_thd->prio, TCAP_DELEG_YIELD)) assert(0);
 		} else {
 			if(cos_asnd(child_thd->sndcap, 1)) assert(0);
 		}

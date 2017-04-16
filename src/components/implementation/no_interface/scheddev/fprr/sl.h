@@ -268,6 +268,7 @@ sl_thd_activate(struct sl_thd *t, sched_tok_t tok, tcap_res_t budget, sl_sched_t
 	}
 	case SL_THD_CHILD_SCHED: /* delegate if it requires replenishment or just send notification */
 	{
+		assert(0);
 		sl_print("A3:%llu:%llu ", sltok, sl__globals()->sched_tok);
 		if (budget) {
 			sl_print("A5\n");
@@ -405,7 +406,7 @@ sl_cs_exit_schedule_nospin(void)
 	}
 	ht = sl_timeout_mod_block_peek();
 	/* if the wakeup time of the high prio thread is why this timeout is set.. */
-	if (ht && sl_cycles_same(ht->wakeup_cycs, sl__globals()->timer_next)) {
+	if (ht && (ht->wakeup_cycs < sl__globals()->timer_next || sl_cycles_same(ht->wakeup_cycs, sl__globals()->timer_next))) {
 		hitc = sl_thd_aep(ht)->tc;
 		hiprio = ht->prio;
 	}

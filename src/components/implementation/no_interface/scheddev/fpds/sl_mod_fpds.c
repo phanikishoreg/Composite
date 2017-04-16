@@ -102,7 +102,7 @@ sl_mod_deadlines(void)
 
 	rdtscll(now);
 
-	if (now - prev > sl_usec2cyc(10 * SL_DEBUG_DL_MISS_DIAG_USEC)) {
+	if (now - prev > sl_usec2cyc(SL_DEBUG_DL_MISS_DIAG_USEC)) {
 		thdid_t tmp = thd_start;
 	//	char buf[1024] = { 0 };
 
@@ -140,7 +140,7 @@ sl_mod_block(struct sl_thd_policy *t)
 
 	rdtscll(now);
 
-	/*if (sl_mod_thd_get(t)->type != SL_THD_SIMPLE)*/ {
+	if (sl_mod_thd_get(t)->type != SL_THD_CHILD_SCHED) {
 		if (now <= t->deadline) {
 			dl_made ++;
 			t->made ++;
