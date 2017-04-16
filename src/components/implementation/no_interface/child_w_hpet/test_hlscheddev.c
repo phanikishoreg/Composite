@@ -98,7 +98,8 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 			tp->made ++;
 		}
 #endif
-		sl_thd_yield(0);
+
+		//sl_thd_yield(0);
 	}
 
 	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
@@ -169,6 +170,7 @@ cos_init(void)
 	cycles_t cycles;
 	thdid_t tid;
 	int rcvd, blocked;
+	cycles_t s, e;
 
 //	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
@@ -223,6 +225,9 @@ cos_init(void)
 			sp.c.value = MS_TO_US(child_thds_T[i]);
 			sl_thd_param_set(threads[i], sp.v);
 		}
+		sp.c.type = SCHEDP_WEIGHT;
+		sp.c.value = MS_TO_US(child_thds_C[i]);
+		sl_thd_param_set(threads[i], sp.v);
 	}
 
 #ifndef STANDALONE_TEST
@@ -233,6 +238,11 @@ cos_init(void)
 #endif
 //	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, sl_thd_aep(threads[HPETAEP_THD])->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
 	
+	e = sl_mod_get_task_starttime();
+
+	rdtscll(s);
+	while (s < e) rdtscll(s);
+
 	sl_sched_loop();
 
 	assert(0);

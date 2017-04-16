@@ -187,6 +187,7 @@ sl_thd_alloc_init(thdid_t tid, struct cos_aep_info *aep, asndcap_t snd, sl_thd_t
 	t->type   = type;
 	t->sndcap = snd;
 	t->budget = 0;
+	t->weight = 0;
 	sl_thd_index_add_backend(sl_mod_thd_policy_get(t));
 
 	t->period = t->wakeup_cycs = 0;
@@ -324,6 +325,9 @@ sl_thd_param_set(struct sl_thd *t, sched_param_t sp)
 	if (type == SCHEDP_WINDOW) {
 		assert(t->period == 0);
 		t->period = sl_usec2cyc(value);
+	} else if (type == SCHEDP_WEIGHT) {
+		t->weight = sl_usec2cyc(value);
+		return;
 	}
 	sl_mod_thd_param_set(sl_mod_thd_policy_get(t), type, value);
 }
@@ -369,7 +373,7 @@ sl_init_sync(cycles_t start, cycles_t task_start)
 	g->start_time   = start;
 
 	if (start == 0 && task_start == 0) tstart = 0;
-	else tstart = (task_start == 0 ? (start + sl_usec2cyc(HPET_PERIOD_USEC * 2)) : task_start);
+	else tstart = (task_start == 0 ? (start + sl_usec2cyc(HPET_PERIOD_USEC * 2) - sl_usec2cyc(20*1000)) : task_start);
 
 	sl_thd_init_backend();
 	sl_aep_init();

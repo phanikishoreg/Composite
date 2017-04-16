@@ -247,6 +247,7 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, struct
 	timeout_cyc = tcap_time2cyc(timeout, now);
 	/* ...or explicit timeout within the bounds of the budget */
 	if (timeout != TCAP_TIME_NIL && timeout_cyc < timer) {
+		assert(sched);
 		cos_info->sched_thd = sched;
 
 		if (tcap_time_lessthan(timeout, tcap_cyc2time(now))) timer = now;

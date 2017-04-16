@@ -30,16 +30,16 @@ enum child_hier_layout {
 #define MS_TO_US(m) (m*1000)
 
 #define CHILD_PERIOD_T 20000 //usecs
-#define CHILD_WCET_C   8000 //usecs
+#define CHILD_WCET_C   10000 //usecs
 #define CHILD_PRIO     2
 
-static microsec_t parent_thds_T[N_PARENT_THDS0] = { 10, 30};
-static microsec_t parent_thds_C[N_PARENT_THDS0] = { 2, 4};
-static microsec_t parent_thds_W[N_PARENT_THDS0] = { 1990, 3990};
+static microsec_t parent_thds_T[N_PARENT_THDS0] = { 18, 36};
+static microsec_t parent_thds_C[N_PARENT_THDS0] = { 2, 12};
+static microsec_t parent_thds_W[N_PARENT_THDS0] = { 1990, 11990};
 static microsec_t parent_thds_Prio[N_PARENT_THDS0] = { 1, 3};
 
-static microsec_t child_thds_T[N_CHILD_THDS] = { 40, 60};
-static microsec_t child_thds_C[N_CHILD_THDS] = { 4, 12};
-static microsec_t child_thds_W[N_CHILD_THDS] = { 3990, 11990};
+static microsec_t child_thds_T[N_CHILD_THDS] = { HPET_PERIOD_USEC/1000, 60};
+static microsec_t child_thds_C[N_CHILD_THDS] = { 10, 15};
+static microsec_t child_thds_W[N_CHILD_THDS] = { 9990, 14990};
 
 #endif /* HIER_LAYOUT_H */

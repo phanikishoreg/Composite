@@ -78,14 +78,15 @@ sl_mod_schedule(void)
 		assert(td);
 
 		/* if this thread is using DS budget server and we have reached/passed replenishment period */
-		if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
+		if (t->budget && ((t->last_period == 0) || (t->last_period + t->period <= now))) {
+		//printc(" M0:%u ", td->thdid);
 			t->last_period = now;
-			td->budget     = t->budget + sl_usec2cyc(10);
+			td->budget     = t->budget;
 			t->expended    = 0;
 		}
 
 		sl_print("M:%u\n", td->thdid);
-		//printc(" M:%u ", td->thdid);
+		//printc(" M1:%u ", td->thdid);
 		return t;
 	}
 
@@ -199,6 +200,11 @@ sl_mod_wakeup(struct sl_thd_policy *t)
 	t->blocked = 0;
 	sl_mod_yield(t, NULL);
 	if (th->type == SL_THD_AEP || th->type == SL_THD_AEP_TCAP) sl_timeout_mod_remove(th);
+	if (th->type == SL_THD_CHILD_SCHED) {
+		t->last_period = sl_now();
+		th->budget     = t->budget;
+		t->expended    = 0;
+	}
 }
 
 void

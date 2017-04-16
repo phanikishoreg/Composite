@@ -755,7 +755,7 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 	int curr_cpu = get_cpuid();
 	struct cap_arcv *arcv;
 	struct cos_cpu_local_info *cos_info;
-	struct thread *rcv_thd, *next, *thd, *cursch;
+	struct thread *rcv_thd, *next, *thd, *cursch, *sched = NULL;
 	struct tcap *rcv_tcap, *tcap, *tcap_next, *ntc;
 	struct comp_info *ci;
 	unsigned long ip, sp;
@@ -805,11 +805,12 @@ cap_hw_asnd(struct cap_asnd *asnd, struct pt_regs *regs)
 
 		if (ret) {
 			timeout = ntp;
+			sched = cursch;
 		}
 	}
 
 	print_this = 1;
-	return cap_switch(regs, thd, next, tcap_next, timeout, NULL, ci, cos_info);
+	return cap_switch(regs, thd, next, tcap_next, timeout, sched, ci, cos_info);
 }
 
 int
@@ -937,6 +938,9 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	}
 
 	next = notify_parent(thd);
+//	if (next != thd) {
+//		tc_next = thd_rcvcap_tcap(next);
+//	}
 	//printk(" &%u ", next->tid);
 //	printk("%%");
 	/*

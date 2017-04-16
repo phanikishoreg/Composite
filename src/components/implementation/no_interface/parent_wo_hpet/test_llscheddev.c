@@ -165,6 +165,9 @@ test_llsched_init(void)
 		sp.c.type  = SCHEDP_WINDOW;
 		sp.c.value = MS_TO_US(parent_thds_T[i]);
 		sl_thd_param_set(threads[i], sp.v);
+		sp.c.type  = SCHEDP_WEIGHT;
+		sp.c.value = MS_TO_US(parent_thds_C[i]);
+		sl_thd_param_set(threads[i], sp.v);
 	}
 
 //	cycles_t now;
@@ -185,7 +188,7 @@ test_llsched_init(void)
 		}
 	}
 
-	e = sl_mod_get_task_starttime() - sl_usec2cyc(10000);
+	e = sl_mod_get_task_starttime();
 
 	rdtscll(s);
 	while (s < e) rdtscll(s);

@@ -42,6 +42,7 @@ struct sl_thd {
 	tcap_prio_t          prio;
 	tcap_res_t           budget; /* if non-zero, transfer/delegate budget and set to zero */
 	struct sl_thd       *dependency;
+	tcap_res_t           weight; /* used for highprio check in cos_switch - a hack*/
 
 	cycles_t             period, wakeup_cycs; /* for wakeup function */
 	int                  wakeup_idx;          /* for wakeup heap */

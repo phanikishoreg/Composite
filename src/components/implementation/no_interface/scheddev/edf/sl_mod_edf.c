@@ -52,12 +52,12 @@ sl_mod_schedule(void)
 
 	if (!heap_size(hs)) return NULL;
 	rdtscll(now);
-	//assert(heap_size(hs));
+	assert(heap_size(hs));
 	t = heap_peek(hs);
 	debug("schedule= peek idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 
 	td = sl_mod_thd_get(t);
-	if (t->budget && ((t->last_period == 0) || (t->last_period && (t->last_period + t->period <= now)))) {
+	if (t->budget && ((t->last_period == 0) || (t->last_period + t->period <= now) || sl_cycles_same(t->last_period + t->period, now))) {
 		t->last_period = now;
 		td->budget     = t->budget;
 //		td->budget     = 0;

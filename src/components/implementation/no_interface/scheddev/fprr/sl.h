@@ -43,6 +43,8 @@
 #define sl_print(fmt,...)
 #endif
 
+#define SL_DIFF_CYCS (1<<16)
+
 /* Critical section (cs) API to protect scheduler data-structures */
 struct sl_cs {
 	union sl_cs_intern {
@@ -92,6 +94,10 @@ sl_exec_cycles(void)
 static inline cycles_t
 sl_now(void)
 { return ps_tsc(); }
+
+static inline int
+sl_cycles_same(cycles_t a, cycles_t b)
+{ return cycles_same(a, b, SL_DIFF_CYCS); }
 
 /*
  * Time and timeout API.
@@ -373,7 +379,7 @@ sl_cs_exit_schedule_nospin(void)
 			budget = (tcap_res_t)cos_introspect(ci, aep->tc, TCAP_GET_BUDGET);
 
 			if (budget < repl) budget = repl - budget;
-			else               budget = 0;
+			else { /*printc("G");*/             budget = 0;}
 		}
 	}
 
@@ -386,6 +392,7 @@ sl_cs_exit_schedule_nospin(void)
 	//		sl_print("A5\n");
 			if(cos_defdelegate(t->sndcap, budget, t->prio, TCAP_DELEG_YIELD)) assert(0);
 		} else {
+			assert(0);
 	//		sl_print("A4\n");
 			cos_asnd(t->sndcap, 1);
 		}
@@ -397,7 +404,8 @@ sl_cs_exit_schedule_nospin(void)
 		//else t->budget -= budget;
 	}
 	ht = sl_timeout_mod_block_peek();
-	if (ht) { // && ht->wakeup_cycs < (now + sl_usec2cyc(200))) {
+	/* if the wakeup time of the high prio thread is why this timeout is set.. */
+	if (ht && sl_cycles_same(ht->wakeup_cycs, sl__globals()->timer_next)) {
 		hitc = sl_thd_aep(ht)->tc;
 		hiprio = ht->prio;
 	}

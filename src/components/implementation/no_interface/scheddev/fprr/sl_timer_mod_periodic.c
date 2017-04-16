@@ -14,8 +14,6 @@ struct wakeup_heap {
 
 static struct heap *hs = (struct heap *)&wakeup_heap;
 
-#define WKUP_DIFF_CYCS (1<<16)
-
 static void
 __sl_timeout_mod_wakeup_expired(cycles_t now)
 {
@@ -34,7 +32,7 @@ __sl_timeout_mod_wakeup_expired(cycles_t now)
 		assert(tp);
 
 //		if (tp->wakeup_cycs > nw) goto next;
-		if (!cycles_same(tp->wakeup_cycs, nw, WKUP_DIFF_CYCS) && (tp->wakeup_cycs > nw)) goto next;
+		if (!sl_cycles_same(tp->wakeup_cycs, nw) && (tp->wakeup_cycs > nw)) goto next;
 		/* AEP threads are explicitly woken up by wakeup scheduling events.. */
 		if (tp->type == SL_THD_AEP || tp->type == SL_THD_AEP_TCAP) goto next;
 		sl_print("T:%u ", tp->thdid);
@@ -46,8 +44,11 @@ __sl_timeout_mod_wakeup_expired(cycles_t now)
 		assert(th && th == tp);
 		th->wakeup_idx = -1;
 		assert(th->type != SL_THD_AEP && th->type != SL_THD_AEP_TCAP);
-		if (th->type == SL_THD_SIMPLE) /*|| th->type == SL_THD_CHILD_NOSCHED)*/ sl_thd_wakeup_cs(th);
-		else                                                               sl_mod_wakeup(sl_mod_thd_policy_get(th));
+		if (th->type == SL_THD_SIMPLE) {
+			sl_thd_wakeup_cs(th);
+		} else {
+			sl_mod_wakeup(sl_mod_thd_policy_get(th));
+		}
 next:
 		idx ++;
 	} while (idx <= heap_size(hs));
