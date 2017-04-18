@@ -901,18 +901,35 @@ static int
 cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	    struct comp_info *ci, struct cos_cpu_local_info *cos_info)
 {
-	struct thread *next = NULL;
+	struct thread *next = NULL, *sched = NULL;
 	struct tcap   *tc_next   = tcap_current(cos_info);
 	struct next_thdinfo *nti = &cos_info->next_ti;
 	tcap_time_t timeout      = TCAP_TIME_NIL;
 	int op                   = __userregs_getop(regs);
 	rcv_flags_t rflags       = __userregs_get1(regs);
-	struct thread *sched = NULL;
+	capid_t srcv             = __userregs_get2(regs);
+	struct cap_arcv *sarcv_cap;
+	struct thread *sthd;
+	struct tcap *stc, *tc;
+	tcap_prio_t prio         = (tcap_prio_t)__userregs_get3(regs) << 32 | (tcap_prio_t)__userregs_get4(regs);
 
 	if (op == CAPTBL_OP_ARCV_HIPRIOTHD) return cap_arcv_schedop(arcv, thd, regs, ci, cos_info);
 
 	//printk(" r:%u ", thd->tid);
 	if (unlikely(arcv->thd != thd || arcv->cpuid != get_cpuid())) return -EINVAL;
+
+	if (srcv) {
+		sarcv_cap = (struct cap_arcv *)captbl_lkup(ci->captbl, srcv);
+		if (!CAP_TYPECHK_CORE(sarcv_cap, CAP_ARCV)) return -EINVAL;
+		sthd = sarcv_cap->thd;
+		stc = thd_rcvcap_tcap(sthd);
+
+		tc = thd_rcvcap_tcap(thd);
+		assert(tc);
+		if (tcap_rcvcap_thd(tc) != thd) return -EINVAL; /* FIXME: only on tcap owned by the rcv */
+
+		tcap_schedprio_update(tc, stc, prio);	
+	}
 
 	/* deliver pending notifications? */
 	if (thd_rcvcap_pending(thd)) {

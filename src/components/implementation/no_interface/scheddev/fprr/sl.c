@@ -405,6 +405,9 @@ sl_sched_loop(void)
 {
 	arcvcap_t sched_rcv = sl_thd_aep(sl__globals()->sched_thd)->rcv;
 //	int iters = 10;
+	tcap_t    sched_tc  = sl_thd_aep(sl__globals()->sched_thd)->tc;
+	struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
+	tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sched_tc, TCAP_GET_BUDGET); 
 
 	while (1) {
 		int pending, ret;
@@ -417,15 +420,20 @@ sl_sched_loop(void)
 			cycles_t       cycles;
 			//rcv_flags_t    rf = RCV_ALL_PENDING | RCV_NON_BLOCKING;
 			struct sl_thd *t;
-
 			/*
 			 * a child scheduler may receive both scheduling notifications (block/unblock 
 			 * states of it's child threads) and normal notifications (mainly activations from
 			 * it's parent scheduler).
 			 */
 retry_rcv:
+			/*
+			 * cos_rcv by a child thread with it's tcap can cause scheduler thread to run with
+			 * child's budget.. in our setup, we don't want that.. we want the scheduler to run with it's
+			 * own tcap.. (else it will consume HPET tcap's budget)
+			 */
+			if (!TCAP_RES_IS_INF(pbudget)) pbudget = (tcap_res_t)cos_introspect(ci, sched_tc, TCAP_GET_BUDGET);
 			sl_print("a");
-			pending = cos_sched_rcv(sched_rcv, sl__globals()->sched_flags, &rcvd, &tid, &blocked, &cycles);
+			pending = cos_sched_rcv(sched_rcv, pbudget ? sl__globals()->sched_flags : 0, &rcvd, &tid, &blocked, &cycles);
 			if (pending == -EAGAIN) {
 //				rf_use = rf_def;
 //				sl_print("j");
