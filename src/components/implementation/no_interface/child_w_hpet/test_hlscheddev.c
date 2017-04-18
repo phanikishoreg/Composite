@@ -79,8 +79,19 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 //			printc("ret=%d", ret);
 //			assert(0);
 //		}
-		cos_deftransfer_aep(aep, 1, t->prio);
-		pending = cos_rcv(rcv, flg, &rcvd);
+//		cos_deftransfer_aep(aep, 1, t->prio);
+		/*
+		 * HACK HACK HACK!
+		 * this is very much close to a ugly hack..
+		 * optimizing to remove a transfer call before the call to cos_rcv..
+		 * thus, updating tcap prio from the sched thread.. 
+		 * if it's not already updated at BLOCK.. Which could be out of sequence, because
+		 * scheduler is the one that calls block on this aep-thread.. 
+		 * also, some blocks can be missed and be interpreted as WAKEUPs.. That could miss 
+		 * calculating deadlines.. hence moved deadline calculation, miss/made calculation right around
+		 * cos_rcv in the same thread..!
+		 */
+		pending = cos_rcv_schedprio(rcv, flg, sl_thd_aep(sl__globals()->sched_thd)->rcv, t->prio, &rcvd);
 		missed = spin_usecs_dl(workusecs, tp->deadline);
 	//	spin_usecs(workusecs);
 #ifdef SL_DEBUG_DEADLINES

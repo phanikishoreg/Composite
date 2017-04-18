@@ -400,6 +400,11 @@ sl_cs_exit_schedule_nospin(void)
 		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
 
 		if (pbudget < budget) budget = pbudget;
+		if (pbudget == 0) {
+			t->budget = repl;
+			budget = 0;
+			/* let scheduler try to run aep without budget..! let's see if we can transfer budget next time */
+		}
 		if (budget && cos_deftransfer_aep(sl_thd_aep(t), budget, t->prio)) assert(0);
 		//else t->budget -= budget;
 	}

@@ -722,6 +722,29 @@ cos_rcv(arcvcap_t rcv, rcv_flags_t flags, int *rcvd)
 	return ret;
 }
 
+/* TODO: only child rcv-endpoints. leaf nodes */
+int
+cos_rcv_schedprio(arcvcap_t rcv, rcv_flags_t flags, arcvcap_t srcv, tcap_prio_t prio, int *rcvd)
+{
+	/* for now, duplicating code.. will remove redundant code eventually! */
+	unsigned long thd_state = 0;
+	unsigned long cyc       = 0;
+	int ret;
+	thdid_t thdid;
+
+	ret     = call_cap_retvals_asm(rcv, 0, flags, srcv, prio >> 32, (prio << 32) >> 32, &thd_state, &cyc);
+
+	thdid   = (thdid_t)(thd_state & ((1 << (sizeof(thdid_t)*8))-1));
+	assert(thdid == 0);
+
+	if (ret >= 0 && flags & RCV_ALL_PENDING) {
+		*rcvd = (ret>>1);
+		ret  &= 1;
+	}
+
+	return ret;
+}
+
 vaddr_t
 cos_mem_alias(struct cos_compinfo *dstci, struct cos_compinfo *srcci, vaddr_t src)
 {

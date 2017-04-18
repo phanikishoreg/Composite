@@ -240,6 +240,28 @@ tcap_merge(struct tcap *dst, struct tcap *rm)
 }
 
 int
+tcap_schedprio_update(struct tcap *tc, struct tcap *sched, tcap_prio_t prio)
+{
+	int i;
+
+	if (tcap_sched_info(tc)->tcap_uid == tcap_sched_info(sched)->tcap_uid) goto done;
+	if (tc->ndelegs == 1) return -EPERM;
+
+	for (i = 0 ; i < tc->ndelegs ; i++) {
+		if (tc->delegations[i].tcap_uid == tcap_sched_info(sched)->tcap_uid) {
+			tc->delegations[i].prio = prio;
+			goto done;
+		}
+	}
+	return -EINVAL;
+done:
+	tcap_sched_info(tc)->prio = prio;
+	tc->perm_prio             = prio;
+
+	return 0;
+}
+
+int
 tcap_wakeup(struct tcap *tc, tcap_prio_t prio, tcap_res_t budget, 
 	    struct thread *thd, struct cos_cpu_local_info *cli)
 {
