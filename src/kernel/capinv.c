@@ -907,6 +907,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	tcap_time_t timeout      = TCAP_TIME_NIL;
 	int op                   = __userregs_getop(regs);
 	rcv_flags_t rflags       = __userregs_get1(regs);
+	struct thread *sched = NULL;
 
 	if (op == CAPTBL_OP_ARCV_HIPRIOTHD) return cap_arcv_schedop(arcv, thd, regs, ci, cos_info);
 
@@ -959,6 +960,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 				cycles_t now;
 				rdtscll(now);
 				timeout = tcap_cyc2time(now + nti->budget);
+				sched = tcap_rcvcap_thd(nti->tc);
 			}
 		} else {
 			next = tcap_rcvcap_thd(nti->tc);
@@ -988,7 +990,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	}
 
 	print_this = 1;
-	return cap_switch(regs, thd, next, tc_next, timeout, NULL, ci, cos_info);
+	return cap_switch(regs, thd, next, tc_next, timeout, sched, ci, cos_info);
 }
 
 static int

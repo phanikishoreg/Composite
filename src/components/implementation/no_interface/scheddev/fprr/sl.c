@@ -373,6 +373,7 @@ sl_init_sync(cycles_t start, cycles_t task_start)
 	g->start_time   = start;
 
 	if (start == 0 && task_start == 0) tstart = 0;
+//	else tstart = (task_start == 0 ? (start + sl_usec2cyc(HPET_PERIOD_USEC * 2)) : task_start);
 	else tstart = (task_start == 0 ? (start + sl_usec2cyc(HPET_PERIOD_USEC * 2) - sl_usec2cyc(20*1000)) : task_start);
 
 	sl_thd_init_backend();

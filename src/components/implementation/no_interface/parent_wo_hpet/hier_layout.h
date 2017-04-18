@@ -29,8 +29,10 @@ enum child_hier_layout {
 
 #define MS_TO_US(m) (m*1000)
 
+#undef HPET_ALIGNED
+#ifdef HPET_ALIGNED
 #define CHILD_PERIOD_T 20000 //usecs
-#define CHILD_WCET_C   8500 //usecs
+#define CHILD_WCET_C   8990 //usecs
 #define CHILD_PRIO     2
 
 static microsec_t parent_thds_T[N_PARENT_THDS0] = { 10, 30};
@@ -39,7 +41,23 @@ static microsec_t parent_thds_W[N_PARENT_THDS0] = { 1000, 9000};
 static microsec_t parent_thds_Prio[N_PARENT_THDS0] = { 1, 3};
 
 static microsec_t child_thds_T[N_CHILD_THDS] = { HPET_PERIOD_USEC/1000, 60};
-static microsec_t child_thds_C[N_CHILD_THDS] = { 10, 12};
-static microsec_t child_thds_W[N_CHILD_THDS] = { 10000, 12000};
+static microsec_t child_thds_C[N_CHILD_THDS] = { 6, 12};
+static microsec_t child_thds_W[N_CHILD_THDS] = { 5990, 12000};
+
+#else
+
+#define CHILD_PERIOD_T 20000 //usecs
+#define CHILD_WCET_C   9990 //usecs
+#define CHILD_PRIO     2
+
+static microsec_t parent_thds_T[N_PARENT_THDS0] = { 18, 36};
+static microsec_t parent_thds_C[N_PARENT_THDS0] = { 2, 12};
+static microsec_t parent_thds_W[N_PARENT_THDS0] = { 2000, 12000};
+static microsec_t parent_thds_Prio[N_PARENT_THDS0] = { 1, 3};
+
+static microsec_t child_thds_T[N_CHILD_THDS] = { HPET_PERIOD_USEC/1000, 60};
+static microsec_t child_thds_C[N_CHILD_THDS] = { 4, 18};
+static microsec_t child_thds_W[N_CHILD_THDS] = { 4000, 18000};
+#endif
 
 #endif /* HIER_LAYOUT_H */

@@ -169,6 +169,11 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 	/* check for stack overflow */
 	assert(round_to_page(&deleg_tmp[0]) == round_to_page(&deleg_tmp[TCAP_MAX_DELEGATIONS-1]));
 	if (unlikely(dst->ndelegs > TCAP_MAX_DELEGATIONS)) return -ENOMEM;
+	//if (unlikely(!tcap_is_active(src))) return -EPERM;
+	if (unlikely(!tcap_is_active(src))) {
+		printk("!!!src:%llu dst:%llu cycles:%lu!!!", tcap_sched_info(src)->tcap_uid, tcap_sched_info(dst)->tcap_uid, cycles);
+		printk("src-cycles:%lu dst-cycles:%lu ", src->budget.cycles, dst->budget.cycles);
+	}
 
 	d = tcap_sched_info(dst)->tcap_uid;
 	s = tcap_sched_info(src)->tcap_uid;
@@ -177,7 +182,6 @@ tcap_delegate(struct tcap *dst, struct tcap *src, tcap_res_t cycles, tcap_prio_t
 		dst->perm_prio             = prio;
 		return 0;
 	}
-	if (unlikely(!tcap_is_active(src))) return -EPERM;
 	if (!prio) prio = tcap_sched_info(src)->prio;
 	srctmpprio = tcap_sched_info(src)->prio;
 	tcap_setprio(src, src->perm_prio);

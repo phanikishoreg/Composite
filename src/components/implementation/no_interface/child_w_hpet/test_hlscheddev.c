@@ -71,6 +71,7 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 		int rcvd = 0;
 		int ret, missed = 0;
 		int pending;
+		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
 
                 tp->deadline += tp->period;
                 tp->priority  = tp->deadline;
@@ -79,7 +80,8 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 //			printc("ret=%d", ret);
 //			assert(0);
 //		}
-		cos_deftransfer_aep(aep, 1, t->prio);
+
+		if (pbudget) cos_deftransfer_aep(aep, 1, t->prio);
 		pending = cos_rcv(rcv, flg, &rcvd);
 		missed = spin_usecs_dl(workusecs, tp->deadline);
 	//	spin_usecs(workusecs);

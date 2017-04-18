@@ -160,8 +160,11 @@ sl_mod_block(struct sl_thd_policy *t)
 		assert(t->priority <= SL_EDF_DL_LOW);
 		sl_thd_setprio(sl_mod_thd_get(t), t->priority);
 	} else {
+		struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
+		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
+
 		/* prio and deadline are updated in the thread right before COS_RCV!*/
-		cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), 1, sl_mod_thd_get(t)->prio);
+		if (pbudget) cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), 1, sl_mod_thd_get(t)->prio);
 	}
 
 //	if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {

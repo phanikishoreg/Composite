@@ -21,7 +21,7 @@
 #define TCAP_MAX_DELEGATIONS 16
 #endif
 
-#define TCAP_TIMER_DIFF      (1<<9)
+#define TCAP_TIMER_DIFF      (1<<12)
 
 struct cap_tcap {
 	struct cap_header h;
@@ -243,10 +243,15 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, struct
 	} 
 
 	/* timeout based on the tcap budget... */
-	timer       = now + left;
+	if (TCAP_RES_IS_INF(left)) timer = 0;
+	else                       timer = now + left;
 	timeout_cyc = tcap_time2cyc(timeout, now);
 	/* ...or explicit timeout within the bounds of the budget */
-	if (timeout != TCAP_TIME_NIL && timeout_cyc < timer) {
+	if (timeout != TCAP_TIME_NIL && (timer == 0 || timeout_cyc < timer)) {
+		if (sched == NULL) {
+			printk("curr tc:%llu-next:%llu timeout:%lu timer:%llu timeout_cyc:%llu\n", 
+			       tcap_sched_info(tcap_current(cos_info))->tcap_uid, tcap_sched_info(next)->tcap_uid, timeout, timer, timeout_cyc); 
+		}
 		assert(sched);
 		cos_info->sched_thd = sched;
 
@@ -254,7 +259,8 @@ tcap_timer_update(struct cos_cpu_local_info *cos_info, struct tcap *next, struct
 		else                                                 timer = timeout_cyc;
 	}
 
-	if (cycles_same(now, timer, TCAP_TIMER_DIFF)) timer = now + TCAP_TIMER_DIFF;
+	assert(timer);
+	if (cycles_same(now, timer, TCAP_TIMER_DIFF) && timer <= now) timer = now + TCAP_TIMER_DIFF;
 	if (cycles_same(cos_info->next_timer, timer, TCAP_TIMER_DIFF) && cos_info->next_timer) return;
 
 	assert(timer); /* TODO: wraparound check when timer == 0 */
