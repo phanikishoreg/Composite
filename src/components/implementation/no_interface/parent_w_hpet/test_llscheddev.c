@@ -22,14 +22,8 @@
 #define BUG() do { debug_print("BUG @ "); *((int *)0) = 0; } while (0);
 #define SPIN(iters) do { if (iters > 0) { for (; iters > 0 ; iters -- ) ; } else { while (1) ; } } while (0)
 
-#define N_TESTTHDS 3
-#define HPETAEP_THD (N_TESTTHDS - 1)
-
-microsec_t T_array[N_TESTTHDS] = { 1000, 1000, 1000};
-microsec_t C_array[N_TESTTHDS] = { 50, 50, 50};
-microsec_t W_array[N_TESTTHDS] = { 45, 45, 45}; /* actual spin work! not including printing and blocking overheads */
-u32_t prio_array[N_TESTTHDS]   = { 1, 3, 4};
 static asndcap_t child_hpet_asnd = 0;
+static int child_bootup_done = 0;
 
 struct comp_cap_info;
 extern struct cos_compinfo *boot_ci;
@@ -42,16 +36,28 @@ hierchild_serverfn(int a, int b, int c)
 {
 	int ret;
 	int spdid = 1;
-	asndcap_t asnd_in_child = a;
 
 	switch(a) {
 	case HPET_SNDCAP:
 	{
+		asndcap_t asnd_in_child = b;
 		struct cos_compinfo *ci       = boot_ci;
 		struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
 
 		child_hpet_asnd = cos_cap_cpy(ci, child_ci, CAP_ASND, asnd_in_child);
 		assert(child_hpet_asnd);
+
+		break;
+	}
+	case HPET_RCVCAP:
+	{
+		struct cos_compinfo *ci       = boot_ci;
+		struct cos_compinfo *child_ci = new_comp_cap_info[spdid].compinfo;
+		arcvcap_t child_hpet_rcv, rcv_in_child = b;
+
+		child_hpet_rcv = cos_cap_cpy(ci, child_ci, CAP_ARCV, rcv_in_child);
+		assert(child_hpet_rcv);
+//		cos_deftransfer(child_hpet_rcv, sl_usec2cyc(8*1000), sl_childsched_get()->prio); 
 
 		break;
 	}
@@ -75,6 +81,12 @@ hierchild_serverfn(int a, int b, int c)
 
 		return diff;
 	}
+	case CHILD_BOOTUP_DONE:
+	{
+		child_bootup_done = 1;
+
+		break;
+	}
 	default: assert(0);
 	}
 
@@ -96,6 +108,7 @@ hier_child_setup(int spdid)
 	assert(ret == 0);
 }
 
+/* TODO: computing deadlines.. */
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
 {
@@ -111,7 +124,7 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 
 		cos_rcv(rcv, flg, &rcvd);
 
-		if (child_hpet_asnd) cos_asnd(child_hpet_asnd, 1);
+		if (child_hpet_asnd) cos_asnd(child_hpet_asnd, 0);
 	}
 
 	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
@@ -138,8 +151,10 @@ test_llsched_init(void)
 	int                     i;
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
-	struct sl_thd          *threads[N_TESTTHDS];
+	struct sl_thd          *threads[N_PARENT_THDS];
 	union sched_param       sp;
+	struct sl_thd          *child_thd;
+	cycles_t s, e;
 
 	hier_child_setup(1);
 //	printc("!!FPDS!!\n");
@@ -153,13 +168,39 @@ test_llsched_init(void)
 		}
 		assert(threads[i]);
 		sp.c.type = SCHEDP_PRIO;
-		sp.c.value = prio_array[i];
+		sp.c.value = parent_thds_Prio[i];
 		sl_thd_param_set(threads[i], sp.v);
 		sp.c.type  = SCHEDP_WINDOW;
-		sp.c.value = T_array[i];
+		sp.c.value = MS_TO_US(parent_thds_T[i]);
+		sl_thd_param_set(threads[i], sp.v);
+		sp.c.type  = SCHEDP_WEIGHT;
+		sp.c.value = MS_TO_US(parent_thds_C[i]);
 		sl_thd_param_set(threads[i], sp.v);
 	}
 
+//	cycles_t now;
+//	rdtscll(now);
+//	printc("%llu\n", now);
+//	while (1);
+
+	child_thd = sl_childsched_get();
+	assert(child_thd);
+	
+	while (!child_bootup_done) {
+		tcap_res_t child_budget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(child_thd)->tc, TCAP_GET_BUDGET);
+
+		if (child_budget == 0) {
+			if(cos_defdelegate(child_thd->sndcap, (tcap_res_t)sl_usec2cyc(5*1000), child_thd->prio, TCAP_DELEG_YIELD)) assert(0);
+		} else {
+			if(cos_asnd(child_thd->sndcap, 1)) assert(0);
+		}
+	}
+
+	e = sl_mod_get_task_starttime();
+
+	rdtscll(s);
+	while (s < e) rdtscll(s);
+	
 	sl_sched_loop();
 
 	assert(0);

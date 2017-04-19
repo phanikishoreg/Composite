@@ -139,10 +139,21 @@ lapic_disable_timer(int timer_type)
 	lapic_is_disabled = 1;
 }
 
+cycles_t
+lapic_get_timer(int timer_type)
+{
+	u32_t low = 0, high = 0;
+
+	assert(timer_type == LAPIC_TSC_DEADLINE);
+	readmsr(IA32_MSR_TSC_DEADLINE, &low, &high);
+	
+	return (((cycles_t)high << 32) | ((cycles_t)low));
+}
+
 void
 lapic_set_timer(int timer_type, cycles_t deadline)
 {
-	u64_t now;
+	u64_t now, val;
 
 	rdtscll(now);
 	if (deadline < now || (deadline - now) < LAPIC_TIMER_MIN) deadline = now + LAPIC_TIMER_MIN;
@@ -156,6 +167,8 @@ lapic_set_timer(int timer_type, cycles_t deadline)
 		lapic_write_reg(LAPIC_INIT_COUNT_REG, counter);
 	} else if (timer_type == LAPIC_TSC_DEADLINE) {
 		writemsr(IA32_MSR_TSC_DEADLINE, (u32_t) ((deadline << 32) >> 32), (u32_t)(deadline >> 32));
+
+		assert(lapic_get_timer(timer_type) == deadline);
 	} else {
 		printk("Mode (%d) not supported\n", timer_type);
 		assert(0);

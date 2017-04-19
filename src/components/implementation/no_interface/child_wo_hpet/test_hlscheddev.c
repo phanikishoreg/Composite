@@ -52,44 +52,98 @@ printc(char *fmt, ...)
 	  return ret;
 }
 
-#define N_TOTALTHDS 4
-#define N_TESTTHDS (N_TOTALTHDS)
-#define HPETRCV_THD (N_TESTTHDS-1)
-
-microsec_t T_array[N_TOTALTHDS] = { 1000, 1000, 1000, 1000};
-microsec_t C_array[N_TOTALTHDS] = { 15, 30, 30, 50};
-microsec_t W_array[N_TOTALTHDS] = { 10, 25, 25, 45}; /* actual spin work! not including printing, blocking overheads */
+#undef STANDALONE_TEST
 
 void
 test_hpetaep_fn(arcvcap_t rcv, void *data)
 {
+	struct cos_compinfo *ci = cos_compinfo_get(cos_defcompinfo_curr_get());
 	struct sl_thd       *t   = sl_thd_curr();
+	struct sl_thd_policy *tp = sl_mod_thd_policy_get(t);
 	struct cos_aep_info *aep = sl_thd_aep(t);
 	thdid_t              tid = t->thdid;
+	cycles_t             now;
+	int counter = 0;
+
+//	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(child_thds_T[HPET_IN_CHILD]))) assert(0);
 
 	while (1) {
-		//microsec_t workusecs = W_array[(int)data];
-		rcv_flags_t flg = RCV_ALL_PENDING;
-		int rcvd;
+		microsec_t workusecs = child_thds_W[(int)data];
+		rcv_flags_t flg = 0;
+		int rcvd = 0;
+		int ret, missed = 0;
+		int pending;
+		tcap_res_t pbudget = (tcap_res_t)cos_introspect(ci, sl_thd_aep(sl__globals()->sched_thd)->tc, TCAP_GET_BUDGET);
 
-		cos_rcv(rcv, flg, &rcvd);
+                tp->deadline += tp->period;
+                tp->priority  = tp->deadline;
+                sl_thd_setprio(t, tp->priority);
+//		if ((ret = cos_tcap_transfer(aep->rcv, aep->tc, 0, t->prio))) {
+//			printc("ret=%d", ret);
+//			assert(0);
+//		}
 
-		//spin_usecs(workusecs);
-		//printc("h=%u:%d", tid, rcvd);
+//		if (pbudget) cos_deftransfer_aep(aep, 1, t->prio);
+//		pending = cos_rcv(rcv, flg, &rcvd);
+//		cos_deftransfer_aep(aep, 1, t->prio);
+		/*
+		 * HACK HACK HACK!
+		 * this is very much close to a ugly hack..
+		 * optimizing to remove a transfer call before the call to cos_rcv..
+		 * thus, updating tcap prio from the sched thread.. 
+		 * if it's not already updated at BLOCK.. Which could be out of sequence, because
+		 * scheduler is the one that calls block on this aep-thread.. 
+		 * also, some blocks can be missed and be interpreted as WAKEUPs.. That could miss 
+		 * calculating deadlines.. hence moved deadline calculation, miss/made calculation right around
+		 * cos_rcv in the same thread..!
+		 */
+		pending = cos_rcv_schedprio(rcv, flg, sl_thd_aep(sl__globals()->sched_thd)->rcv, t->prio, &rcvd);
+		missed = spin_usecs_dl(workusecs, tp->deadline);
+	//	spin_usecs(workusecs);
+#ifdef SL_DEBUG_DEADLINES
+		if (rcvd > 1) {
+			printc("R:%d", rcvd);
+			rcvd --;
+			dl_missed += rcvd;
+			tp->missed += rcvd;
+		}
+		if (missed) {
+			dl_missed ++;
+			tp->missed ++;
+		} else {
+			dl_made ++;
+			tp->made ++;
+		}
+#endif
+
+		//sl_thd_yield(0);
 	}
-}
 
+//	cos_hw_detach(BOOT_CAPTBL_SELF_INITHW_BASE, HW_PERIODIC);
+}
 
 void
 test_thd_fn(void *data)
 {
+	struct sl_thd *t = sl_thd_curr();
+	struct sl_thd_policy *tp = sl_mod_thd_policy_get(t);
 	thdid_t tid = cos_thdid();
 
 	while (1) {
-		microsec_t workusecs = W_array[(int)data];
+		int missed = 0;
+		microsec_t workusecs = child_thds_W[(int)data];
 	
-//		printc("h=%u", tid);
 		spin_usecs(workusecs);
+		//missed = spin_usecs_dl(workusecs, tp->deadline);
+#ifdef SL_DEBUG_DEADLINES
+//		if (missed) {
+//			dl_missed ++;
+//			tp->missed ++;
+//		} else {
+//			dl_made ++;
+//			tp->made ++;
+//		}
+#endif
 		sl_thd_block(0);
 	}
 }
@@ -100,10 +154,14 @@ cos_init(void)
 	int                     i, ret;
 	struct cos_defcompinfo *defci = cos_defcompinfo_curr_get();
 	struct cos_compinfo    *ci    = cos_compinfo_get(defci);
-	struct sl_thd          *threads[N_TOTALTHDS];
-	union sched_param       sp    = {.c = {.type = SCHEDP_WINDOW, .value = 0}};
+	struct sl_thd          *threads[N_CHILD_THDS];
+	union sched_param       sp;
 	cycles_t                sched_start_time, task_start_time, now;
 	unsigned int b = 0, c = 0;
+	cycles_t cycles;
+	thdid_t tid;
+	int rcvd, blocked;
+	cycles_t s, e;
 
 //	printc("EDF!!\n");
 	cos_meminfo_init(&(ci->mi), BOOT_MEM_KM_BASE, COS_MEM_KERN_PA_SZ, BOOT_CAPTBL_SELF_UNTYPED_PT);
@@ -112,6 +170,7 @@ cos_init(void)
                                  BOOT_CAPTBL_SELF_INITRCV_BASE, BOOT_CAPTBL_SELF_PT, BOOT_CAPTBL_SELF_CT,
                                  BOOT_CAPTBL_SELF_COMP, (vaddr_t)cos_get_heap_ptr(), CHILD_HIER_FREE);
 
+#ifndef STANDALONE_TEST
 	rdtscll(now);
 	b = (now >> 32);
 	c = ((now << 32)>>32);
@@ -127,14 +186,30 @@ cos_init(void)
 //	test_loop((void *)i);
 
 	sl_init_sync(sched_start_time, task_start_time);
+#else
+	sl_init();
+#endif
 
-	for (i = 0 ; i < N_TESTTHDS ; i++) {
-		if (i == HPETRCV_THD) {
+	for (i = 0 ; i < N_CHILD_THDS ; i++) {
+		if (i == HPET_IN_CHILD) {
 			asndcap_t sndcap;
-			int ret;
 
-			threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
-							  sl_thd_aep(sl__globals()->sched_thd)->tc);
+			threads[i] = sl_aepthd_alloc(test_hpetaep_fn, (void *)i);
+			//threads[i] = sl_aepthd_tcap_alloc(test_hpetaep_fn, (void *)i, 
+			//				  sl_thd_aep(sl__globals()->sched_thd)->tc);
+			assert(threads[i]);
+
+			ret = cos_sinv(CHILD_HIER_SINV, HPET_RCVCAP, sl_thd_aep(threads[i])->rcv, 0, 0);
+
+			sp.c.type  = SCHEDP_WINDOW;
+			sp.c.value = MS_TO_US(child_thds_T[i]);
+			sl_thd_param_set(threads[i], sp.v);
+			
+			sp.c.type  = SCHEDP_BUDGET;
+			sp.c.value = MS_TO_US(child_thds_C[i]);
+			sl_thd_param_set(threads[i], sp.v);
+
+			assert(MS_TO_US(child_thds_T[i]) == HPET_PERIOD_USEC);
 			sndcap = cos_asnd_alloc(ci, sl_thd_aep(threads[i])->rcv, ci->captbl_cap);
 			assert(sndcap);
 
@@ -142,11 +217,29 @@ cos_init(void)
 			assert(ret == 0);
 		} else {
 			threads[i] = sl_thd_alloc(test_thd_fn, (void *)i);
+			assert(threads[i]);
+
+			sp.c.type  = SCHEDP_WINDOW;
+			sp.c.value = MS_TO_US(child_thds_T[i]);
+			sl_thd_param_set(threads[i], sp.v);
 		}
-		assert(threads[i]);
-		sp.c.value = T_array[i];
+		sp.c.type = SCHEDP_WEIGHT;
+		sp.c.value = MS_TO_US(child_thds_C[i]);
 		sl_thd_param_set(threads[i], sp.v);
 	}
+
+#ifndef STANDALONE_TEST
+	/* Because of boot up scheduling.. I'm sure there are events in the queue! Clear them! */
+	cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, RCV_ALL_PENDING, &rcvd, &tid, &blocked, &cycles);
+
+	ret = cos_sinv(CHILD_HIER_SINV, CHILD_BOOTUP_DONE, 0, 0, 0);
+#endif
+//	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, sl_thd_aep(threads[HPETAEP_THD])->rcv, MS_TO_US(T_array[HPETAEP_THD]))) assert(0);
+	
+	e = sl_mod_get_task_starttime();
+
+	rdtscll(s);
+	while (s < e) rdtscll(s);
 
 	sl_sched_loop();
 

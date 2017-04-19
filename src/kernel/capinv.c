@@ -680,6 +680,7 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 	struct tcap *tcap   = tcap_current(cos_info);
 	struct thread *sched = NULL;
 	int ret;
+	cycles_t now = tsc();
 
 	if (thd_cap->cpuid != get_cpuid() || thd_cap->cpuid != next->cpuid) return -EINVAL;
 
@@ -697,7 +698,7 @@ cap_thd_op(struct cap_thd *thd_cap, struct thread *thd, struct pt_regs *regs,
 		if (thd_rcvcap_get_counter(rcvt) > usr_counter)	return -EAGAIN;
 		thd_rcvcap_set_counter(rcvt, usr_counter);
 		thd_rcvcap_next_timeout_set(rcvt, timeout);
-		if (thd_rcvcap_pending(rcvt) > 0) {
+		if (thd_rcvcap_pending(rcvt) > 0 || (timeout && cycles_same(tcap_time2cyc(timeout, now), now, (1<<10)))) {
 			if (thd == rcvt) return -EBUSY;
 			next = rcvt;
 			/* tcap inheritance here...use the current tcap to process events */

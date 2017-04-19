@@ -50,9 +50,9 @@ sl_mod_schedule(void)
 	struct sl_thd_policy *t;
 	struct sl_thd *td;
 
+	assert(heap_size(hs));
 	if (!heap_size(hs)) return NULL;
 	rdtscll(now);
-	assert(heap_size(hs));
 	t = heap_peek(hs);
 	debug("schedule= peek idx: %d, deadline: %llu\n", t->prio_idx, t->deadline);
 
@@ -98,6 +98,15 @@ sl_mod_deadlines(void)
 			while (1) ;
 	}
 #endif
+}
+
+static void
+__sl_mod_block(struct sl_thd_policy *t)
+{
+	if (t->prio_idx > -1) heap_remove(hs, t->prio_idx);
+	t->prio_idx  = -1;
+
+	sl_timeout_mod_block(sl_mod_thd_get(t), 1, 0);
 }
 
 void
@@ -287,6 +296,7 @@ sl_mod_thd_param_set(struct sl_thd_policy *t, sched_param_type_t type, unsigned 
 		assert(t->period != 0);
 		if (sl_mod_thd_get(t)->type == SL_THD_AEP_TCAP) {
 			ret = cos_deftransfer_aep(sl_thd_aep(sl_mod_thd_get(t)), t->budget, sl_mod_thd_get(t)->prio);
+			if (ret == 0) __sl_mod_block(t);
 		}
 		t->last_period = start_now;
 	}

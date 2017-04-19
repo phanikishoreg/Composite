@@ -63,8 +63,6 @@ test_hpetaep_fn(arcvcap_t rcv, void *data)
 	cycles_t             now;
 	int counter = 0;
 
-	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, aep->rcv, MS_TO_US(child_thds_T[HPET_IN_CHILD]))) assert(0);
-
 	while (1) {
 		microsec_t workusecs = child_thds_W[(int)data];
 		rcv_flags_t flg = 0;
@@ -257,6 +255,7 @@ cos_init(void)
 
 	rdtscll(s);
 	while (s < e) rdtscll(s);
+	if (cos_hw_periodic_attach(BOOT_CAPTBL_SELF_INITHW_BASE, sl_thd_aep(threads[HPET_IN_CHILD])->rcv, MS_TO_US(child_thds_T[HPET_IN_CHILD]))) assert(0);
 
 	sl_sched_loop();
 
