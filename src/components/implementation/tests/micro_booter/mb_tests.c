@@ -17,21 +17,29 @@ test_thds_perf(void)
 	thdcap_t ts;
 	long long total_swt_cycles = 0;
 	long long start_swt_cycles = 0, end_swt_cycles = 0;
-	int i;
+	long long curr_swt_cycles = 0;
+	long long wcet_swt_cycles = 0, pwcet_swt_cycles = 0;
+	int i, iter = 0;
 
 	ts = cos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn_perf, NULL);
 	assert(ts);
 	cos_thd_switch(ts);
 
-	rdtscll(start_swt_cycles);
 	for (i = 0 ; i < ITER ; i++) {
+		rdtscll(start_swt_cycles);
 		cos_thd_switch(ts);
+		rdtscll(end_swt_cycles);
+		curr_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
+		
+		total_swt_cycles += curr_swt_cycles;
+		if (curr_swt_cycles > wcet_swt_cycles) {
+			iter = i;
+			pwcet_swt_cycles = wcet_swt_cycles;
+			wcet_swt_cycles = curr_swt_cycles;
+		}
 	}
-	rdtscll(end_swt_cycles);
-	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
 
-	PRINTC("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n",
-		total_swt_cycles, (long long) ITER, (total_swt_cycles / (long long)ITER));
+	PRINTC("THD SWTCH WCET:%lld:%d:%lld, Average (Total: %lld / Iterations: %lld ): %lld\n", wcet_swt_cycles, iter, pwcet_swt_cycles, total_swt_cycles, (long long) ITER, (total_swt_cycles / (long long)ITER));
 }
 
 static void
@@ -103,10 +111,11 @@ async_thd_fn_perf(void *thdcap)
 
 	cos_rcv(rc);
 
-	for (i = 0 ; i < ITER + 1 ; i++) {
+	for (i = 0 ; i < ITER+1 ; i++) {
 		cos_rcv(rc);
 	}
 
+	assert(0);
 	cos_thd_switch(tc);
 }
 
@@ -116,21 +125,28 @@ async_thd_parent_perf(void *thdcap)
 	thdcap_t tc = (thdcap_t)thdcap;
 	arcvcap_t rc = rcp_global;
 	asndcap_t sc = scp_global;
-	long long total_asnd_cycles = 0;
+	long long total_asnd_cycles = 0, curr_asnd_cycles = 0;
+	long long wcet_asnd_cycles = 0, pwcet_asnd_cycles = 0;
 	long long start_asnd_cycles = 0, end_arcv_cycles = 0;
-	int i;
+	int i, iter = 0;
 
 	cos_asnd(sc, 1);
 
-	rdtscll(start_asnd_cycles);
 	for (i = 0 ; i < ITER ; i++) {
+		rdtscll(start_asnd_cycles);
 		cos_asnd(sc, 1);
-	}
-	rdtscll(end_arcv_cycles);
-	total_asnd_cycles = (end_arcv_cycles - start_asnd_cycles) / 2;
+		rdtscll(end_arcv_cycles);
 
-	PRINTC("Average ASND/ARCV (Total: %lld / Iterations: %lld ): %lld\n",
-		total_asnd_cycles, (long long) (ITER), (total_asnd_cycles / (long long)(ITER)));
+		curr_asnd_cycles = (end_arcv_cycles - start_asnd_cycles) / 2;
+		total_asnd_cycles += curr_asnd_cycles;
+		if (curr_asnd_cycles > wcet_asnd_cycles) {
+			iter = i;
+			pwcet_asnd_cycles = wcet_asnd_cycles;
+			wcet_asnd_cycles = curr_asnd_cycles;
+		}
+	}
+
+	PRINTC("ASND/ARCV WCET:%llu:%d:%llu, Average (Total: %lld / Iterations: %lld ): %lld\n", wcet_asnd_cycles, iter, pwcet_asnd_cycles, total_asnd_cycles, (long long) (ITER), (total_asnd_cycles / (long long)(ITER)));
 
 	async_test_flag = 0;
 	while (1) cos_thd_switch(tc);
@@ -807,8 +823,12 @@ test_inv_perf(void)
 	sinvcap_t ic;
 	int i;
 	long long total_cycles = 0LL;
+	long long wcet_inv_cycles = 0, wcet_ret_cycles = 0;
+	long long pwcet_inv_cycles = 0, pwcet_ret_cycles = 0;
+	long long curr_inv_cycles = 0, curr_ret_cycles = 0;
 	long long total_inv_cycles = 0LL, total_ret_cycles = 0LL;
 	unsigned int ret;
+	int iiter = 0, riter = 0;
 
 	cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)NULL);
 	assert(cc > 0);
@@ -824,14 +844,26 @@ test_inv_perf(void)
 		rdtscll(start_cycles);
 		call_cap_mb(ic, 1, 2, 3);
 		rdtscll(end_cycles);
-		total_inv_cycles += (midinv_cycles - start_cycles);
-		total_ret_cycles += (end_cycles - midinv_cycles);
+		curr_inv_cycles = (midinv_cycles - start_cycles);
+		curr_ret_cycles = (end_cycles - midinv_cycles);
+		total_inv_cycles += curr_inv_cycles;
+		total_ret_cycles += curr_ret_cycles;
+
+		if (curr_inv_cycles > wcet_inv_cycles) {
+			iiter = i;
+			pwcet_inv_cycles = wcet_inv_cycles;
+			wcet_inv_cycles = curr_inv_cycles;
+		}
+
+		if (curr_ret_cycles > wcet_ret_cycles) {
+			riter = i;
+			pwcet_ret_cycles = wcet_ret_cycles;
+			wcet_ret_cycles = curr_ret_cycles;
+		}
 	}
 
-	PRINTC("Average SINV (Total: %lld / Iterations: %lld ): %lld\n",
-		total_inv_cycles, (long long) (ITER), (total_inv_cycles / (long long)(ITER)));
-	PRINTC("Average SRET (Total: %lld / Iterations: %lld ): %lld\n",
-		total_ret_cycles, (long long) (ITER), (total_ret_cycles / (long long)(ITER)));
+	PRINTC("SINV WCET:%llu:%d:%llu, Average (Total: %lld / Iterations: %lld ): %lld\n", wcet_inv_cycles, iiter, pwcet_inv_cycles, total_inv_cycles, (long long) (ITER), (total_inv_cycles / (long long)(ITER)));
+	PRINTC("SRET WCET:%llu:%d:%llu, Average (Total: %lld / Iterations: %lld ): %lld\n", wcet_ret_cycles, riter, pwcet_ret_cycles, total_ret_cycles, (long long) (ITER), (total_ret_cycles / (long long)(ITER)));
 }
 
 void
@@ -855,24 +887,24 @@ test_captbl_expand(void)
 void
 test_run_mb(void)
 {
-	test_timer();
-	test_budgets();
-
-	test_thds();
+//	test_timer();
+//	test_budgets();
+//
+//	test_thds();
 	test_thds_perf();
-
-	test_mem();
-
-	test_async_endpoints();
+//
+//	test_mem();
+//
+//	test_async_endpoints();
 	test_async_endpoints_perf();
-
-	test_inv();
+//
+//	test_inv();
 	test_inv_perf();
+//
+//	test_captbl_expand();
 
-	test_captbl_expand();
-
-	test_wakeup();
-	test_preemption();
+//	test_wakeup();
+//	test_preemption();
 }
 
 /*
