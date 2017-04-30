@@ -1,4 +1,7 @@
 #include "micro_booter.h"
+#include "perfdata.h"
+
+//struct perfdata pd;
 
 static void
 thd_fn_perf(void *d)
@@ -280,70 +283,6 @@ test_async_endpoints_perf(void)
 	async_test_flag = 1;
 	while (async_test_flag) cos_thd_switch(tcp);
 }
-
-#define TCAP_NLAYERS 3
-static volatile int child_activated[TCAP_NLAYERS][2];
-/* tcap child/parent receive capabilities, and the send capability */
-static volatile arcvcap_t tc_crc[TCAP_NLAYERS][2], tc_prc[TCAP_NLAYERS][2];
-static volatile asndcap_t tc_sc[TCAP_NLAYERS][3];
-
-static void
-tcap_child(void *d)
-{
-	arcvcap_t __tc_crc = (arcvcap_t)d;
-
-	while (1) {
-		int pending;
-
-		pending = cos_rcv(__tc_crc);
-		PRINTC("tcap_test:rcv: pending %d\n", pending);
-	}
-}
-
-static void
-tcap_parent(void *d)
-{
-	int i;
-	asndcap_t __tc_sc = (asndcap_t)d;
-
-	for (i = 0 ; i < ITER ; i++) {
-		cos_asnd(__tc_sc, 0);
-	}
-}
-
-/* static void */
-/* test_tcaps(void) */
-/* { */
-/* 	thdcap_t tcp, tcc; */
-/* 	tcap_t tccp, tccc; */
-/* 	arcvcap_t rcp, rcc; */
-
-/* 	/\* parent rcv capabilities *\/ */
-/* 	tcp = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_parent, (void*)BOOT_CAPTBL_SELF_INITTHD_BASE); */
-/* 	assert(tcp); */
-/* 	tccp = cos_tcap_split(&booter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, 0); */
-/* 	assert(tccp); */
-/* 	rcp = cos_arcv_alloc(&booter_info, tcp, tccp, booter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE); */
-/* 	assert(rcp); */
-
-/* 	/\* child rcv capabilities *\/ */
-/* 	tcc = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_child, (void*)tcp); */
-/* 	assert(tcc); */
-/* 	tccc = cos_tcap_split(&booter_info, BOOT_CAPTBL_SELF_INITTCAP_BASE, 0, 0); */
-/* 	assert(tccc); */
-/* 	rcc = cos_arcv_alloc(&booter_info, tcc, tccc, booter_info.comp_cap, rcp); */
-/* 	assert(rcc); */
-
-/* 	/\* make the snd channel to the child *\/ */
-/* 	scp_global = cos_asnd_alloc(&booter_info, rcc, booter_info.captbl_cap); */
-/* 	assert(scp_global); */
-
-/* 	rcc_global = rcc; */
-/* 	rcp_global = rcp; */
-
-/* 	async_test_flag = 1; */
-/* 	while (async_test_flag) cos_thd_switch(tcp); */
-/* } */
 
 static void
 spinner(void *d)
@@ -883,6 +822,208 @@ test_captbl_expand(void)
 	PRINTC("Captbl expand SUCCESS.\n");
 }
 
+/* Make sure TCAP_MAX_DELEGATIONS = TEST_MAX_DELEGS-1 to be able to test upto MAX levels*/
+#define TEST_MAX_DELEGS (15)
+static volatile tcap_t tcs[TEST_MAX_DELEGS];
+static volatile thdcap_t thds[TEST_MAX_DELEGS];
+static volatile arcvcap_t rcvs[TEST_MAX_DELEGS];
+static volatile asndcap_t asnds[TEST_MAX_DELEGS][TEST_MAX_DELEGS];
+static volatile long long total_tcap_cycles = 0, start_tcap_cycles = 0, end_tcap_cycles = 0;
+
+static void
+tcap_test_fn(void *d)
+{
+	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	while (1) {
+		rdtscll(end_tcap_cycles);
+		cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
+	}
+}
+
+static void
+tcap_perf_test_prepare(void)
+{
+	int i, j, ret;
+
+	memset(tcs, 0, sizeof(tcap_t)*TEST_MAX_DELEGS);
+	memset(thds, 0, sizeof(thdcap_t)*TEST_MAX_DELEGS);
+	memset(rcvs, 0, sizeof(arcvcap_t)*TEST_MAX_DELEGS);
+	memset(asnds, 0, sizeof(asndcap_t)*TEST_MAX_DELEGS*TEST_MAX_DELEGS);
+	/* Preperation for tcaps ubenchmarks */
+	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+		tcs[i] = cos_tcap_alloc(&booter_info);
+		assert(tcs[i]);
+		
+		thds[i] = cos_thd_alloc(&booter_info, booter_info.comp_cap, tcap_test_fn, (void *)i);
+		assert(thds[i]);
+		cos_thd_switch(thds[i]);
+
+		rcvs[i] = cos_arcv_alloc(&booter_info, thds[i], tcs[i], booter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
+		assert(rcvs[i]);
+
+		ret = cos_tcap_transfer(rcvs[i], BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX);
+		assert(ret == 0);
+	}
+
+	for (i = 0 ; i < TEST_MAX_DELEGS ; i ++) {
+		for (j = i + 1 ; j < TEST_MAX_DELEGS ; j ++) {
+
+			asnds[i][j] = cos_asnd_alloc(&booter_info, rcvs[j], booter_info.captbl_cap);
+			assert(asnds[i][j]);
+
+			asnds[j][i] = cos_asnd_alloc(&booter_info, rcvs[i], booter_info.captbl_cap);
+			assert(asnds[j][i]);
+		}
+	}
+}
+
+static void
+tcap_perf_test_ndeleg(int ndelegs)
+{
+	int i, j;
+
+	/* TODO: cleanup with for-loop */
+	for (i = 1 ; i <= (ndelegs - 1) ; i ++) {
+		for (j = 1 ; j <= (ndelegs - 1) ; j ++) {
+			if (i == j) continue;
+			if ((cos_tcap_transfer(rcvs[i-1], tcs[j-1], TCAP_RES_INF, TCAP_PRIO_MAX))) assert(0);
+		}
+	}
+
+	/*
+	 * Prep for tcap-deleg ubench
+	 * Required because the current tcap being the ROOT tcap, has ndelegs = 1.
+	 */
+	if (cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, TCAP_DELEG_YIELD)) assert(0);
+}
+
+static void
+tcap_perf_test_transfer(void)
+{
+	int i;
+	long long wcet_tcap_cycles = 0, pwcet_tcap_cycles = 0;
+
+//	perfdata_init(&pd, "Transfer");
+	total_tcap_cycles = 0;
+	for (i = 0 ; i < ITER ; i ++) {
+		long long curr_tcap_cycles = 0;
+
+		start_tcap_cycles = 0;
+		end_tcap_cycles = 0;
+		rdtscll(start_tcap_cycles);
+		if (unlikely(cos_tcap_transfer(rcvs[0], tcs[1], TCAP_RES_INF, TCAP_PRIO_MAX))) assert(0);
+		rdtscll(end_tcap_cycles);
+
+		curr_tcap_cycles = (end_tcap_cycles - start_tcap_cycles);
+//		perfdata_add(&pd, (double)curr_tcap_cycles);
+		if (curr_tcap_cycles > wcet_tcap_cycles) {
+			pwcet_tcap_cycles = wcet_tcap_cycles;
+			wcet_tcap_cycles = curr_tcap_cycles;
+		}
+		total_tcap_cycles += curr_tcap_cycles;
+	}
+
+//	perfdata_calc(&pd);
+//	perfdata_print(&pd);
+	//PRINTC("Tcap-transfer WCET:%lld:%d:%lld, Average (Total: %lld / Iterations: %lld ): %lld\n", wcet_tcap_cycles, iter, pwcet_tcap_cycles,
+	//	total_tcap_cycles, (long long)ITER, (total_tcap_cycles / (long long)ITER)); 
+	PRINTC("Tcap-transfer WCET:%lld(prev:%lld), Average:%lld, Total:%lld\n", wcet_tcap_cycles, pwcet_tcap_cycles,
+		(total_tcap_cycles / (long long)ITER), total_tcap_cycles); 
+}
+
+static void
+tcap_perf_test_delegate(int yield)
+{
+	int i;
+	long long wcet_tcap_cycles = 0, pwcet_tcap_cycles = 0;
+
+	total_tcap_cycles = 0;
+//	if (yield) perfdata_init(&pd, "Delegate(Y)");
+//	else       perfdata_init(&pd, "Delegate");
+	for (i = 0 ; i < ITER ; i ++) {
+		long long curr_tcap_cycles = 0;
+
+		start_tcap_cycles = 0;
+		end_tcap_cycles = 0;
+		rdtscll(start_tcap_cycles);
+		if (unlikely(cos_tcap_delegate(asnds[0][1], tcs[0], TCAP_RES_INF, TCAP_PRIO_MAX, yield))) assert(0);
+
+		curr_tcap_cycles = (end_tcap_cycles - start_tcap_cycles);
+//		perfdata_add(&pd, (double)curr_tcap_cycles);
+		if (curr_tcap_cycles > wcet_tcap_cycles) {
+			pwcet_tcap_cycles = wcet_tcap_cycles;
+			wcet_tcap_cycles = curr_tcap_cycles;
+		}
+		total_tcap_cycles += curr_tcap_cycles;
+	}
+
+//	perfdata_calc(&pd);
+//	perfdata_print(&pd);
+	PRINTC("Tcap-delegate%s WCET:%lld(prev:%lld), Average:%lld, Total:%lld\n", yield ? "(Y)" : "", 
+		wcet_tcap_cycles, pwcet_tcap_cycles,
+		(total_tcap_cycles / (long long)ITER), total_tcap_cycles); 
+}
+
+static void
+test_tcaps_perf(void)
+{
+	int ndelegs[] = { 3, 4, 8, 16};
+	int i;
+
+	tcap_perf_test_prepare();
+	for ( i = 0; i < (int)(sizeof(ndelegs)/sizeof(ndelegs[0])); i ++) {
+		PRINTC("Tcaps-ubench for ndelegs = %d\n", ndelegs[i]);
+		tcap_perf_test_ndeleg(ndelegs[i]);
+		tcap_perf_test_transfer();
+		tcap_perf_test_delegate(1);
+		tcap_perf_test_delegate(0);
+	}
+}
+
+/* USE THIS FOR HPET TIMER */
+//long long spinner_cycles = 0;
+//static void
+//spinner_perf(void *d)
+//{ while (1) rdtscll(spinner_cycles); }
+//
+//static void
+//test_timer_perf(void)
+//{
+//	int i;
+//	thdcap_t tc;
+//	thdid_t tid;
+//	int rcving;
+//	cycles_t cycles;
+//	long long end_cycles, total_cycles = 0;
+//	long long wcet_timer_cycles = 0, pwcet_timer_cycles = 0;
+//	int iter = 0;
+//
+//	tc = cos_thd_alloc(&booter_info, booter_info.comp_cap, spinner_perf, NULL);
+//	assert(tc);
+//
+//	cos_thd_switch(tc);
+//
+//	for (i = 0 ; i < ITER ; i++) {
+//		long long curr_timer_cycles = 0;
+//
+//		rdtscll(end_cycles);
+//		cos_sched_rcv(BOOT_CAPTBL_SELF_INITRCV_BASE, &tid, &rcving, &cycles);
+//
+//		curr_timer_cycles = (end_cycles - spinner_cycles);
+//		total_cycles += curr_timer_cycles;
+//		if (curr_timer_cycles > wcet_timer_cycles) {
+//			iter = i;
+//			pwcet_timer_cycles = wcet_timer_cycles;
+//			wcet_timer_cycles = curr_timer_cycles;
+//		}
+//		cos_thd_switch(tc);
+//	}
+//
+//	PRINTC("Timer-int latency WCET:%lld:%d:%lld, Average (Total: %lld / Iterations: %lld ): %lld\n",
+//		wcet_timer_cycles, iter, pwcet_timer_cycles,
+//		total_cycles, (long long) ITER, (total_cycles / (long long)ITER));
+//}
+
 /* Executed in micro_booter environment */
 void
 test_run_mb(void)
@@ -891,20 +1032,22 @@ test_run_mb(void)
 //	test_budgets();
 //
 //	test_thds();
-	test_thds_perf();
+//	test_thds_perf();
 //
 //	test_mem();
 //
 //	test_async_endpoints();
-	test_async_endpoints_perf();
+//	test_async_endpoints_perf();
 //
 //	test_inv();
-	test_inv_perf();
+//	test_inv_perf();
 //
 //	test_captbl_expand();
 
 //	test_wakeup();
 //	test_preemption();
+
+	test_tcaps_perf();
 }
 
 /*

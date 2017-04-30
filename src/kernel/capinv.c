@@ -441,7 +441,7 @@ static int
 cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 	       struct comp_info *ci, struct cos_cpu_local_info *cos_info)
 {
-	struct next_thdinfo *nti  = &cos_info->next_ti;
+//	struct next_thdinfo *nti  = &cos_info->next_ti;
 	struct comp_info *next_ci = &(next->invstk[next->invstk_top].comp_info);
 	int               preempt = 0;
 
@@ -492,7 +492,7 @@ cap_thd_switch(struct pt_regs *regs, struct thread *curr, struct thread  *next,
 	/* if it was suspended for budget expiration, clear it */
 	next->state &= ~THD_STATE_SUSPENDED;
 	/* if switching to the preempted/awoken thread clear cpu local next_thdinfo */
-	if (nti->thd && nti->thd == next) thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
+//	if (nti->thd && nti->thd == next) thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
 
 	copy_all_regs(&next->regs, regs);
 
@@ -804,7 +804,7 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 {
 	struct thread *next;
 	struct tcap   *tc_next   = tcap_current(cos_info);
-	struct next_thdinfo *nti = &cos_info->next_ti;
+//	struct next_thdinfo *nti = &cos_info->next_ti;
 	tcap_time_t timeout      = TCAP_TIME_NIL;
 
 	if (unlikely(arcv->thd != thd || arcv->cpuid != get_cpuid())) return -EINVAL;
@@ -822,21 +822,21 @@ cap_arcv_op(struct cap_arcv *arcv, struct thread *thd, struct pt_regs *regs,
 	}
 
 	next = notify_parent(thd);
-	/* if preempted/awoken thread is waiting, switch to that */
-	if (nti->thd) {
-		assert(nti->tc);
-
-		next = nti->thd;
-		tc_next = nti->tc;
-		tcap_setprio(nti->tc, nti->prio);
-		if (nti->budget) {
-			/* convert budget to timeout */
-			cycles_t now;
-			rdtscll(now);
-			timeout = tcap_cyc2time(now + nti->budget);
-		}
-		thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
-	}
+//	/* if preempted/awoken thread is waiting, switch to that */
+//	if (nti->thd) {
+//		assert(nti->tc);
+//
+//		next = nti->thd;
+//		tc_next = nti->tc;
+//		tcap_setprio(nti->tc, nti->prio);
+//		if (nti->budget) {
+//			/* convert budget to timeout */
+//			cycles_t now;
+//			rdtscll(now);
+//			timeout = tcap_cyc2time(now + nti->budget);
+//		}
+//		thd_next_thdinfo_update(cos_info, 0, 0, 0, 0);
+//	}
 
 	/* FIXME:  for now, lets just ignore this path...need to plumb tcaps into it */
 	thd->interrupted_thread = NULL;
