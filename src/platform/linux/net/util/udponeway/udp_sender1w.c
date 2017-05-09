@@ -19,9 +19,12 @@
 #include <sys/time.h>
 #include <signal.h>
 #include <time.h>
+#include "spin.h"
 
 #define rdtscll(val) \
         __asm__ __volatile__("rdtsc" : "=A" (val))
+
+#define debug(fmt,...) 
 
 unsigned long long max = 0, min = (unsigned long long)-1, tot = 0, cnt = 0;
 int rcv = 0;
@@ -37,18 +40,21 @@ void construct_header(char *msg)
 	rdtscll(time);
 	int_msg[0] = seqno;
 	ll_msg[1] = time;
-	printf("sending message %d with timestamp %lld\n", seqno, time);
+	debug("sending message %d with timestamp %lld\n", seqno, time);
 	seqno++;
 
 	return;
 }
 
+#define RUN_TIME 120
+unsigned int run_secs = 0;
 unsigned int msg_sent = 0, msg_rcved;
 void signal_handler(int signo)
 {
+	run_secs ++;
 	printf("Messages sent/sec: %d", msg_sent);
 	if (rcv) {
-		printf(", avg response time: %lld, WC: %lld, min: %lld, received/sent:%d\n", 
+		debug(", avg response time: %lld, WC: %lld, min: %lld, received/sent:%d\n", 
 		       cnt == 0 ? 0 : tot/cnt, 
 		       max, min, 
 		       msg_sent == 0 ? 0 : (unsigned int)(msg_rcved*100)/(unsigned int)msg_sent);
@@ -59,6 +65,10 @@ void signal_handler(int signo)
 		printf("\n");
 	}
 	msg_sent = 0;
+	if (run_secs > RUN_TIME) {
+		printf("Done. Runtime:%u secs\n", run_secs);
+		exit(1);
+	}
 }
 
 int socket_nonblock(int fd)
@@ -92,7 +102,7 @@ void do_recv_proc(int fd, int msg_sz)
 			rdtscll(curr);
 			seqno = seqno_ptr[0];
 			prev  = prev_ptr[1];
-//			printf("Received message %d with stamp %lld @ %lld\n", seqno, prev, curr);
+//			debug("Received message %d with stamp %lld @ %lld\n", seqno, prev, curr);
 			amnt = curr - prev;
 			tot += amnt;
 			cnt++;
@@ -110,7 +120,9 @@ void start_timers()
 {
 	struct itimerval itv;
 	struct sigaction sa;
+	sigset_t mask;
 
+	debug("Starting timer..\n");
 	sa.sa_handler = signal_handler;
 	sa.sa_flags = 0;
 	//sigemptyset(&sa.sa_mask);
@@ -120,6 +132,8 @@ void start_timers()
 		perror("Setting up alarm handler");
 		exit(-1);
 	}
+	sigprocmask(0, NULL, &mask);
+	sigdelset(&mask, SIGALRM);
 
 	memset(&itv, 0, sizeof(itv));
 	itv.it_value.tv_sec = 1;
@@ -137,6 +151,7 @@ int foo = 0;
 
 int main(int argc, char *argv[])
 {
+	unsigned long long start, end, cycs;
 	int fd;
 	struct sockaddr_in sa;
 	int msg_size;
@@ -148,11 +163,12 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	sleep_val = atoi(argv[4]);
-	sleep_val = sleep_val == 0 ? 1 : sleep_val;
+//	sleep_val = sleep_val == 0 ? 1 : sleep_val;
 
 	msg_size = atoi(argv[3]);
 	msg_size = msg_size < (sizeof(unsigned long long)*2) ? (sizeof(unsigned long long)*2) : msg_size;
 	msg     = malloc(msg_size);
+	memset(msg, 0, msg_size);
 	rcv_msg = malloc(msg_size);
 
 	sa.sin_family      = PF_INET;
@@ -162,25 +178,89 @@ int main(int argc, char *argv[])
 		perror("Establishing socket");
 		return -1;
 	}
+	
+	spin_calib();
+
+//	rdtscll(start);
+//	spin_usecs(1000);
+//	rdtscll(end);
+//	cycs = end - start;
+//	printf("1000usec:%llu:%llu\n", end-start, (end-start)/CYCS_PER_USEC);
+//
+//	rdtscll(start);
+//	spin_cycles(cycs);
+//	rdtscll(end);
+//	printf("1000usec:%llu:%llu\n", end-start, (end-start)/CYCS_PER_USEC);
+//
+	rdtscll(start);
+	spin_usecs(100);
+	rdtscll(end);
+	printf("100usec:%llu:%llu\n", end-start, (end-start)/CYCS_PER_USEC);
+
+
+	rdtscll(start);
+	spin_usecs(50);
+	rdtscll(end);
+	printf("50usec:%llu:%llu\n", end-start, (end-start)/CYCS_PER_USEC);
+
+	rdtscll(start);
+	spin_usecs(40);
+	rdtscll(end);
+	printf("40usec:%llu:%llu\n", end-start, (end-start)/CYCS_PER_USEC);
+
+	rdtscll(start);
+	spin_usecs(10);
+	rdtscll(end);
+	printf("10usec:%llu:%llu\n", end-start, (end-start)/CYCS_PER_USEC);
+
+	if (sleep_val) {
+		rdtscll(start);
+		spin_iters(sleep_val);
+		rdtscll(end);
+		cycs = end - start;
+		printf("%diters:%llu:%lluusecs\n", sleep_val, end-start, (end-start)/CYCS_PER_USEC);
+		rdtscll(start);
+		spin_cycles(cycs);
+		rdtscll(end);
+		printf("%diters:%llu:%lluusecs\n", sleep_val, end-start, (end-start)/CYCS_PER_USEC);
+//
+//		rdtscll(start);
+//		spin_usecs(sleep_val);
+//		rdtscll(end);
+//		printf("%dusec:%llu:%llu\n", sleep_val, end-start, (end-start)/CYCS_PER_USEC);
+//		rdtscll(start);
+//		spin_usecs(sleep_val);
+//		rdtscll(end);
+//		printf("%dusec:%llu:%llu\n", sleep_val, end-start, (end-start)/CYCS_PER_USEC);
+//		rdtscll(start);
+//		spin_usecs(sleep_val);
+//		rdtscll(end);
+//		printf("%dusec:%llu:%llu\n", sleep_val, end-start, (end-start)/CYCS_PER_USEC);
+
+	} else {
+		printf("skip sleep_val spin test\n");
+	}
+//	construct_header(msg);
+//	printf("Msg_size=(%d)\n", msg_size);
+
 	start_timers();
 
 	while (1) {
-		int i;
+//		int i;
 		
-		construct_header(msg);
+//		construct_header(msg);
 		
-		if (sendto(fd, msg, msg_size, 0, (struct sockaddr*)&sa, sizeof(sa)) < 0 &&	
+		//if (sendto(fd, msg, msg_size, 0, (struct sockaddr*)&sa, sizeof(sa)) < 0 &&	
+		if (sendto(fd, NULL, 0, 0, (struct sockaddr*)&sa, sizeof(sa)) < 0 &&	
 		    errno != EINTR) {
 			perror("sendto");
 			return -1;
 		}
 		msg_sent++;
 		
-		for (i=0 ; i < sleep_val ; i++) {
-			foo++;
-		}
-		//nanosleep(&ts, NULL);
-		printf("Message sent! (%d) msg_size (%d)\n", msg_sent, msg_size);
+		//if (sleep_val) spin_usecs(sleep_val); 
+		if (sleep_val) spin_iters(sleep_val); 
+		debug("Message sent! (%d) msg_size (%d)\n", msg_sent, msg_size);
 	}
 	return 0;
 }
