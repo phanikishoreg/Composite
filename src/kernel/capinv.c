@@ -1476,7 +1476,7 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			capid_t tcpdst 		 = __userregs_get1(regs);
 			tcap_res_t res 		 = __userregs_get2(regs);
 			u32_t prio_higher 	 = __userregs_get3(regs);
-			u32_t prio_lower 	 = __userregs_get4(regs);
+			u32_t prio_lower 	 = __userregs_ext_get4(regs);
 			tcap_prio_t prio 	 = (tcap_prio_t)prio_higher << 32 | (tcap_prio_t)prio_lower;
 			struct cap_tcap *tcapsrc = (struct cap_tcap *)ch;
 			struct cap_arcv *rcv;
@@ -1507,7 +1507,7 @@ composite_syscall_slowpath(struct pt_regs *regs, int *thd_switch)
 			capid_t   asnd_cap       = __userregs_get1(regs);
 			long long res 	         = __userregs_get2(regs);
 			u32_t     prio_higher    = __userregs_get3(regs);
-			u32_t     prio_lower     = __userregs_get4(regs);
+			u32_t     prio_lower     = __userregs_ext_get4(regs);
 			struct cap_tcap *tcapsrc = (struct cap_tcap *)ch;
 			struct cap_arcv *arcv;
 			struct cap_asnd *asnd;

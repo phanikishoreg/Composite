@@ -12,23 +12,17 @@
 #include <cos_types.h>
 #include <errno.h>
 #include <util.h>
-#include <sysargs.h>
+#include <sysargs_ext.h>
 
 /* temporary */
 static inline
 int call_cap_asm(u32_t cap_no, u32_t op, int arg1, int arg2, int arg3, int arg4)
 {
-	struct sysargs args;
         long fault = 0;
 	int ret;
 
 	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
 	cap_no += op;
-
-	sysargs_set_r1(&args, arg1);
-	sysargs_set_r2(&args, arg2);
-	sysargs_set_r3(&args, arg3);
-	sysargs_set_r4(&args, arg4);
 
 	__asm__ __volatile__( \
 		"pushl %%ebp\n\t" \
@@ -46,27 +40,59 @@ int call_cap_asm(u32_t cap_no, u32_t op, int arg1, int arg2, int arg3, int arg4)
 		"3:\n\t" \
 		"popl %%ebp" \
 		: "=a" (ret), "=c" (fault) \
-		: "a" (cap_no), "b" (&args) \
+		: "a" (cap_no), "b" (arg1), "S" (arg2), "D" (arg3), "d" (arg4) \
 		: "memory", "cc");
 
 	return ret;
 }
 
 static inline
-int call_cap_retvals_asm(u32_t cap_no, u32_t op, int arg1, int arg2, int arg3, int arg4,
-			 unsigned long *r1, unsigned long *r2, unsigned long *r3)
+int call_cap_asm_ext(u32_t cap_no, u32_t op, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6, int arg7)
 {
-	struct sysargs args;
+	struct sysargs_ext eargs;
         long fault = 0;
 	int ret;
 
 	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
 	cap_no += op;
-	sysargs_set_r1(&args, arg1);
-	sysargs_set_r2(&args, arg2);
-	sysargs_set_r3(&args, arg3);
-	sysargs_set_r4(&args, arg4);
 
+	sysargs_ext_set_r1(&eargs, arg4);
+	sysargs_ext_set_r2(&eargs, arg5);
+	sysargs_ext_set_r3(&eargs, arg6);
+	sysargs_ext_set_r4(&eargs, arg7);
+
+	__asm__ __volatile__( \
+		"pushl %%ebp\n\t" \
+		"movl %%esp, %%ebp\n\t" \
+		"movl $1f, %%ecx\n\t" \
+		"sysenter\n\t" \
+		".align 8\n\t" \
+		"jmp 2f\n\t" \
+		".align 8\n\t" \
+		"1:\n\t" \
+		"movl $0, %%ecx\n\t" \
+		"jmp 3f\n\t" \
+		"2:\n\t" \
+		"movl $1, %%ecx\n\t" \
+		"3:\n\t" \
+		"popl %%ebp" \
+		: "=a" (ret), "=c" (fault) \
+		: "a" (cap_no), "b" (arg1), "S" (arg2), "D" (arg3), "d" (&eargs) \
+		: "memory", "cc");
+
+	return ret;
+}
+
+
+static inline
+int call_cap_retvals_asm(u32_t cap_no, u32_t op, int arg1, int arg2, int arg3, int arg4,
+			 unsigned long *r1, unsigned long *r2, unsigned long *r3)
+{
+        long fault = 0;
+	int ret;
+
+	cap_no = (cap_no + 1) << COS_CAPABILITY_OFFSET;
+	cap_no += op;
 
 	__asm__ __volatile__( \
 		"pushl %%ebp\n\t" \
@@ -84,7 +110,7 @@ int call_cap_retvals_asm(u32_t cap_no, u32_t op, int arg1, int arg2, int arg3, i
 		"3:\n\t" \
 		"popl %%ebp\n\t" \
 		: "=a" (ret), "=c" (fault), "=S" (*r1), "=D" (*r2), "=b" (*r3) \
-		: "a" (cap_no), "b" (&args) \
+		: "a" (cap_no), "b" (arg1), "S" (arg2), "D" (arg3), "d" (arg4) \
 		: "memory", "cc");
 
 	return ret;
@@ -106,6 +132,12 @@ static inline int
 call_cap_op(u32_t cap_no, u32_t op_code, int arg1, int arg2, int arg3, int arg4)
 {
 	return call_cap_asm(cap_no, op_code, arg1, arg2, arg3, arg4);
+}
+
+static inline int
+call_cap_op_ext(u32_t cap_no, u32_t op_code, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6, int arg7)
+{
+	return call_cap_asm_ext(cap_no, op_code, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 static void

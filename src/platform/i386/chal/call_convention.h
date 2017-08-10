@@ -2,7 +2,7 @@
 #define CALL_CONVENTION_H
 
 #include "../../../kernel/include/asm_ipc_defs.h"
-#include "../../../kernel/include/shared/sysargs.h"
+#include "../../../kernel/include/shared/sysargs_ext.h"
 
 /*
  * Functions to maintain calling conventions on invocation and return
@@ -55,16 +55,28 @@ __userregs_sinvupdate(struct pt_regs *regs)
 }
 static inline int
 __userregs_get1(struct pt_regs *regs)
-{ return ((struct sysargs *)(regs->bx))->r1; }
+{ return regs->bx; }
 static inline int
 __userregs_get2(struct pt_regs *regs)
-{ return ((struct sysargs *)(regs->bx))->r2; }
+{ return regs->si; }
 static inline int
 __userregs_get3(struct pt_regs *regs)
-{ return ((struct sysargs *)(regs->bx))->r3; }
+{ return regs->di; }
 static inline int
 __userregs_get4(struct pt_regs *regs)
-{ return ((struct sysargs *)(regs->bx))->r4; }
+{ return regs->dx; }
+static inline int
+__userregs_ext_get4(struct pt_regs *regs)
+{ return ((struct sysargs_ext *)(regs->dx))->r1; }
+static inline int
+__userregs_ext_get5(struct pt_regs *regs)
+{ return ((struct sysargs_ext *)(regs->dx))->r2; }
+static inline int
+__userregs_ext_get6(struct pt_regs *regs)
+{ return ((struct sysargs_ext *)(regs->dx))->r3; }
+static inline int
+__userregs_ext_get7(struct pt_regs *regs)
+{ return ((struct sysargs_ext *)(regs->dx))->r4; }
 
 static inline void
 copy_gp_regs(struct pt_regs *from, struct pt_regs *to)

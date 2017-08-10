@@ -873,7 +873,7 @@ cos_tcap_transfer(arcvcap_t dst, tcap_t src, tcap_res_t res, tcap_prio_t prio)
 	int prio_higher = (u32_t)(prio >> 32);
 	int prio_lower  = (u32_t)((prio << 32) >> 32);
 
-	return call_cap_op(src, CAPTBL_OP_TCAP_TRANSFER, dst, res, prio_higher, prio_lower);
+	return call_cap_op_ext(src, CAPTBL_OP_TCAP_TRANSFER, dst, res, prio_higher, prio_lower, 0, 0, 0);
 }
 
 int
@@ -884,7 +884,7 @@ cos_tcap_delegate(asndcap_t dst, tcap_t src, tcap_res_t res, tcap_prio_t prio, t
 	int prio_higher = (u32_t)(prio >> 32) | (yield << ((sizeof(yield)*8)-1));
 	int prio_lower  = (u32_t)((prio << 32) >> 32);
 
-	return call_cap_op(src, CAPTBL_OP_TCAP_DELEGATE, dst, res, prio_higher, prio_lower);
+	return call_cap_op_ext(src, CAPTBL_OP_TCAP_DELEGATE, dst, res, prio_higher, prio_lower, 0, 0, 0);
 }
 
 int
