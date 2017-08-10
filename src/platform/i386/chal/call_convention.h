@@ -2,6 +2,7 @@
 #define CALL_CONVENTION_H
 
 #include "../../../kernel/include/asm_ipc_defs.h"
+#include "../../../kernel/include/shared/sysargs.h"
 
 /*
  * Functions to maintain calling conventions on invocation and return
@@ -54,16 +55,16 @@ __userregs_sinvupdate(struct pt_regs *regs)
 }
 static inline int
 __userregs_get1(struct pt_regs *regs)
-{ return regs->bx; }
+{ return ((struct sysargs *)(regs->bx))->r1; }
 static inline int
 __userregs_get2(struct pt_regs *regs)
-{ return regs->si; }
+{ return ((struct sysargs *)(regs->bx))->r2; }
 static inline int
 __userregs_get3(struct pt_regs *regs)
-{ return regs->di; }
+{ return ((struct sysargs *)(regs->bx))->r3; }
 static inline int
 __userregs_get4(struct pt_regs *regs)
-{ return regs->dx; }
+{ return ((struct sysargs *)(regs->bx))->r4; }
 
 static inline void
 copy_gp_regs(struct pt_regs *from, struct pt_regs *to)
