@@ -274,6 +274,12 @@ enum
 
 enum
 {
+	/* flush caches */
+	HW_CACHE_FLUSH,
+};
+
+enum
+{
 	/* tcap budget */
 	TCAP_GET_BUDGET,
 };
