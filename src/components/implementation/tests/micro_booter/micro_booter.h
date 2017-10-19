@@ -34,7 +34,7 @@
 #include <cos_kernel_api.h>
 
 #define PRINTC printc
-#define ITER 10000
+#define ITER 1000000
 #define TEST_NTHDS 5
 
 extern struct cos_compinfo booter_info;

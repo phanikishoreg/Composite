@@ -1,4 +1,4 @@
-C_OBJS=micro_booter.o mb_tests.o
+C_OBJS=micro_booter.o mb_tests.o perf_tests.o
 ASM_OBJS=cos_asm_scheduler.o inv.o
 COMPONENT=micro_boot.o
 INTERFACES=

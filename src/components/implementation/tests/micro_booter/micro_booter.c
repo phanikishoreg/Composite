@@ -3,6 +3,7 @@
 struct cos_compinfo booter_info;
 thdcap_t            termthd; /* switch to this to shutdown */
 unsigned long       tls_test[TEST_NTHDS];
+extern unsigned int cyc_per_usec;
 
 #include <llprint.h>
 
@@ -14,6 +15,8 @@ term_fn(void *d)
 {
 	SPIN();
 }
+
+extern void test_run_perf();
 
 void
 cos_init(void)
@@ -27,11 +30,16 @@ cos_init(void)
 	termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
 	assert(termthd);
 
-	cycs = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
-	printc("\t%d cycles per microsecond\n", cycs);
+	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
+	printc("\t%u cycles per microsecond\n", cyc_per_usec);
 
 	PRINTC("\nMicro Booter started.\n");
-	test_run_mb();
+//	PRINTC("\nUnit-tests start\n");
+//	test_run_mb();
+//	PRINTC("\nUnit-tests end\n");
+	PRINTC("\nPerformance-tests start\n");
+	test_run_perf();
+	PRINTC("\nPerformance-tests end\n");
 	PRINTC("\nMicro Booter done.\n");
 
 	cos_thd_switch(termthd);

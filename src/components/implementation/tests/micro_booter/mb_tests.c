@@ -5,40 +5,6 @@
 unsigned int cyc_per_usec;
 
 static void
-thd_fn_perf(void *d)
-{
-	cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
-
-	while (1) {
-		cos_thd_switch(BOOT_CAPTBL_SELF_INITTHD_BASE);
-	}
-	PRINTC("Error, shouldn't get here!\n");
-}
-
-static void
-test_thds_perf(void)
-{
-	thdcap_t  ts;
-	long long total_swt_cycles = 0;
-	long long start_swt_cycles = 0, end_swt_cycles = 0;
-	int       i;
-
-	ts = cos_thd_alloc(&booter_info, booter_info.comp_cap, thd_fn_perf, NULL);
-	assert(ts);
-	cos_thd_switch(ts);
-
-	rdtscll(start_swt_cycles);
-	for (i = 0; i < ITER; i++) {
-		cos_thd_switch(ts);
-	}
-	rdtscll(end_swt_cycles);
-	total_swt_cycles = (end_swt_cycles - start_swt_cycles) / 2LL;
-
-	PRINTC("Average THD SWTCH (Total: %lld / Iterations: %lld ): %lld\n", total_swt_cycles, (long long)ITER,
-	       (total_swt_cycles / (long long)ITER));
-}
-
-static void
 thd_fn(void *d)
 {
 	PRINTC("\tNew thread %d with argument %d, capid %ld\n", cos_thdid(), (int)d, tls_test[(int)d]);
@@ -102,47 +68,6 @@ test_mem(void)
 volatile arcvcap_t rcc_global, rcp_global;
 volatile asndcap_t scp_global;
 int                async_test_flag = 0;
-
-static void
-async_thd_fn_perf(void *thdcap)
-{
-	thdcap_t  tc = (thdcap_t)thdcap;
-	arcvcap_t rc = rcc_global;
-	int       i;
-
-	cos_rcv(rc, 0, NULL);
-
-	for (i = 0; i < ITER + 1; i++) {
-		cos_rcv(rc, 0, NULL);
-	}
-
-	cos_thd_switch(tc);
-}
-
-static void
-async_thd_parent_perf(void *thdcap)
-{
-	thdcap_t  tc                = (thdcap_t)thdcap;
-	asndcap_t sc                = scp_global;
-	long long total_asnd_cycles = 0;
-	long long start_asnd_cycles = 0, end_arcv_cycles = 0;
-	int       i;
-
-	cos_asnd(sc, 1);
-
-	rdtscll(start_asnd_cycles);
-	for (i = 0; i < ITER; i++) {
-		cos_asnd(sc, 1);
-	}
-	rdtscll(end_arcv_cycles);
-	total_asnd_cycles = (end_arcv_cycles - start_asnd_cycles) / 2;
-
-	PRINTC("Average ASND/ARCV (Total: %lld / Iterations: %lld ): %lld\n", total_asnd_cycles, (long long)(ITER),
-	       (total_asnd_cycles / (long long)(ITER)));
-
-	async_test_flag = 0;
-	while (1) cos_thd_switch(tc);
-}
 
 #define TEST_TIMEOUT_MS 1
 
@@ -277,43 +202,6 @@ test_async_endpoints(void)
 
 	PRINTC("Async end-point test successful.\n");
 	PRINTC("Test done.\n");
-}
-
-static void
-test_async_endpoints_perf(void)
-{
-	thdcap_t  tcp, tcc;
-	tcap_t    tccp, tccc;
-	arcvcap_t rcp, rcc;
-
-	/* parent rcv capabilities */
-	tcp = cos_thd_alloc(&booter_info, booter_info.comp_cap, async_thd_parent_perf,
-	                    (void *)BOOT_CAPTBL_SELF_INITTHD_BASE);
-	assert(tcp);
-	tccp = cos_tcap_alloc(&booter_info);
-	assert(tccp);
-	rcp = cos_arcv_alloc(&booter_info, tcp, tccp, booter_info.comp_cap, BOOT_CAPTBL_SELF_INITRCV_BASE);
-	assert(rcp);
-	if (cos_tcap_transfer(rcp, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX + 1)) assert(0);
-
-	/* child rcv capabilities */
-	tcc = cos_thd_alloc(&booter_info, booter_info.comp_cap, async_thd_fn_perf, (void *)tcp);
-	assert(tcc);
-	tccc = cos_tcap_alloc(&booter_info);
-	assert(tccc);
-	rcc = cos_arcv_alloc(&booter_info, tcc, tccc, booter_info.comp_cap, rcp);
-	assert(rcc);
-	if (cos_tcap_transfer(rcc, BOOT_CAPTBL_SELF_INITTCAP_BASE, TCAP_RES_INF, TCAP_PRIO_MAX)) assert(0);
-
-	/* make the snd channel to the child */
-	scp_global = cos_asnd_alloc(&booter_info, rcc, booter_info.captbl_cap);
-	assert(scp_global);
-
-	rcc_global = rcc;
-	rcp_global = rcp;
-
-	async_test_flag = 1;
-	while (async_test_flag) cos_thd_switch(tcp);
 }
 
 static void
@@ -800,39 +688,6 @@ test_inv(void)
 	PRINTC("Test done.\n");
 }
 
-static void
-test_inv_perf(void)
-{
-	compcap_t    cc;
-	sinvcap_t    ic;
-	int          i;
-	long long    total_inv_cycles = 0LL, total_ret_cycles = 0LL;
-	unsigned int ret;
-
-	cc = cos_comp_alloc(&booter_info, booter_info.captbl_cap, booter_info.pgtbl_cap, (vaddr_t)NULL);
-	assert(cc > 0);
-	ic = cos_sinv_alloc(&booter_info, cc, (vaddr_t)__inv_test_serverfn);
-	assert(ic > 0);
-	ret = call_cap_mb(ic, 1, 2, 3);
-	assert(ret == 0xDEADBEEF);
-
-	for (i = 0; i < ITER; i++) {
-		long long start_cycles = 0LL, end_cycles = 0LL;
-
-		midinv_cycles = 0LL;
-		rdtscll(start_cycles);
-		call_cap_mb(ic, 1, 2, 3);
-		rdtscll(end_cycles);
-		total_inv_cycles += (midinv_cycles - start_cycles);
-		total_ret_cycles += (end_cycles - midinv_cycles);
-	}
-
-	PRINTC("Average SINV (Total: %lld / Iterations: %lld ): %lld\n", total_inv_cycles, (long long)(ITER),
-	       (total_inv_cycles / (long long)(ITER)));
-	PRINTC("Average SRET (Total: %lld / Iterations: %lld ): %lld\n", total_ret_cycles, (long long)(ITER),
-	       (total_ret_cycles / (long long)(ITER)));
-}
-
 void
 test_captbl_expand(void)
 {
@@ -858,20 +713,11 @@ test_run_mb(void)
 
 	test_timer();
 	test_budgets();
-
 	test_thds();
-	test_thds_perf();
-
 	test_mem();
-
 	test_async_endpoints();
-	test_async_endpoints_perf();
-
 	test_inv();
-	test_inv_perf();
-
 	test_captbl_expand();
-
 	/*
 	 * FIXME: Preemption stack mechanism in the kernel is disabled.
 	 * test_wakeup();
@@ -909,13 +755,11 @@ test_run_vk(void)
 	cyc_per_usec = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 
 	test_thds();
-	test_thds_perf();
 	block_vm();
 
 	test_mem();
 
 	test_inv();
-	test_inv_perf();
 	block_vm();
 
 	test_captbl_expand();
