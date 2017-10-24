@@ -1,3 +1,4 @@
+#include <event_trace.h>
 #include "micro_booter.h"
 
 struct cos_compinfo booter_info;
@@ -26,6 +27,7 @@ cos_init(void)
 
 	termthd = cos_thd_alloc(&booter_info, booter_info.comp_cap, term_fn, NULL);
 	assert(termthd);
+	event_trace_init();
 
 	cycs = cos_hw_cycles_per_usec(BOOT_CAPTBL_SELF_INITHW_BASE);
 	printc("\t%d cycles per microsecond\n", cycs);

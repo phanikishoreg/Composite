@@ -37,6 +37,16 @@ serial_puts(const char *s)
 	for (; *s != '\0'; s++) serial_send(*s);
 }
 
+void
+chal_serial_putb(const void *d, int len)
+{
+#ifdef ENABLE_SERIAL
+	int i = 0;
+
+	for (; i < len; i++) serial_send(*(char *)(d+i));
+#endif
+}
+
 int
 serial_handler(struct pt_regs *r)
 {

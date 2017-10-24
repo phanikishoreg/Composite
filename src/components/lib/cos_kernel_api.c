@@ -10,6 +10,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <event_trace.h>
 
 #ifdef NIL
 #define printd(...) printc(__VA_ARGS__)
@@ -742,7 +743,23 @@ cos_cap_cpy_at(struct cos_compinfo *dstci, capid_t dstcap, struct cos_compinfo *
 int
 cos_thd_switch(thdcap_t c)
 {
-	return call_cap_op(c, 0, 0, 0, 0, 0);
+	struct event_info einfo;
+	int ret;
+
+	/* TODO: optimized api will help here */
+	einfo.type = KERNEL_EVENT;
+	einfo.sub_type = THD_SWITCH_START;
+	rdtscll(einfo.timestamp);
+	einfo.thdid = cos_thdid();
+	event_trace(&einfo);
+
+	ret = call_cap_op(c, 0, 0, 0, 0, 0);
+	
+	einfo.sub_type = THD_SWITCH_END;
+	rdtscll(einfo.timestamp);
+	event_trace(&einfo);
+
+	return ret;
 }
 
 int
@@ -761,8 +778,24 @@ cos_sched_sync(void)
 int
 cos_switch(thdcap_t c, tcap_t tc, tcap_prio_t prio, tcap_time_t timeout, arcvcap_t rcv, sched_tok_t stok)
 {
-	return call_cap_op(c, (stok >> 16), tc << 16 | rcv, (prio << 32) >> 32,
+	struct event_info einfo;
+	int ret;
+
+	/* TODO: optimized api will help here */
+	einfo.type = KERNEL_EVENT;
+	einfo.sub_type = THD_SWITCH_START;
+	rdtscll(einfo.timestamp);
+	einfo.thdid = cos_thdid();
+	event_trace(&einfo);
+
+	ret = call_cap_op(c, (stok >> 16), tc << 16 | rcv, (prio << 32) >> 32,
 	                   (((prio << 16) >> 48) << 16) | ((stok << 16) >> 16), timeout);
+	
+	einfo.sub_type = THD_SWITCH_END;
+	rdtscll(einfo.timestamp);
+	event_trace(&einfo);
+
+	return ret;
 }
 
 int

@@ -107,4 +107,6 @@ void chal_init(void);
 extern void printk(const char *fmt, ...);
 void        chal_khalt(void);
 
+void chal_serial_putb(const void *data, int len);
+
 #endif /* CHAL_H */

@@ -28,6 +28,6 @@ printk(const char *fmt, ...)
 	va_end(args);
 
 	for (i = 0; i < num_handlers; i++) {
-		printk_handlers[i](buffer);
+		//printk_handlers[i](buffer);
 	}
 }

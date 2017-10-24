@@ -174,7 +174,7 @@ vga_init(void)
 	csr_x = 0;
 	csr_y = 0;
 	cls();
-	printk_register_handler(vga_puts);
+//	printk_register_handler(vga_puts);
 }
 
 /* Put the character C on the screen. */

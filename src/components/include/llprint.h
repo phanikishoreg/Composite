@@ -38,4 +38,10 @@ printc(char *fmt, ...)
 	return ret;
 }
 
+static void
+serial_print(void *d, int len)
+{
+	call_cap(PRINT_CAP_TEMP, (int)d, len, 1 /* serial print */, 0);
+}
+
 #endif /* LLPRINT_H */

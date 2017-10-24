@@ -82,6 +82,26 @@ done:
 	return 0;
 }
 
+static inline int
+serial_out(struct pt_regs *regs)
+{
+	void *data;
+	int len;
+	
+	data = (void *)__userregs_get1(regs);
+	len  = __userregs_get2(regs);
+
+	if (len < 1) goto done;
+	
+	/* FIXME: user buffer directly to print to serial */
+	chal_serial_putb(data, len);
+
+done:
+	__userregs_set(regs, 0, __userregs_getsp(regs), __userregs_getip(regs));
+
+	return 0;
+}
+
 void cos_cap_ipi_handling(void);
 void
 cos_cap_ipi_handling(void)
@@ -972,7 +992,11 @@ composite_syscall_handler(struct pt_regs *regs)
 
 	/* FIXME: use a cap for print */
 	if (unlikely(cap == PRINT_CAP_TEMP)) {
-		printfn(regs);
+		if (__userregs_get3(regs) == 1) {
+			serial_out(regs);
+		} else {
+			printfn(regs);
+		}
 		return 0;
 	}
 
