@@ -4,7 +4,7 @@
 #include <sched_info.h>
 
 u32_t cycs_per_usec = 0;
-extern int parent_schedinit_child(void);
+extern int parent_schedinit_child(cbuf_t id);
 
 #define INITIALIZE_PRIO 1
 #define INITIALIZE_BUDGET_MS 2000
@@ -19,9 +19,14 @@ static struct sl_thd *__initializer_thd = NULL;
 static int
 schedinit_self(void)
 {
+	static int first = 1;
+	cbuf_t shmid = sched_shminfo_id(sched_shminfo_cur_get());
+
 	/* if my init is done and i've all child inits */
 	if (self_init && num_child_init == sched_num_childsched_get()) {
-		if (parent_schedinit_child() < 0) assert(0);
+		assert(first);
+		first = 0;
+		if (parent_schedinit_child(shmid) < 0) assert(0);
 
 		return 0;
 	}

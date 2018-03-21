@@ -39,7 +39,7 @@ struct sl_thd {
 	struct cos_aep_info *aepinfo;
 	asndcap_t            sndcap;
 	tcap_prio_t          prio;
-	struct sl_thd       *dependency;
+	struct sl_thd       *dependency, *sched;
 
 	tcap_res_t budget;        /* budget if this thread has it's own tcap */
 	cycles_t   last_replenish;
@@ -76,5 +76,9 @@ sl_thd_asndcap(struct sl_thd *t)
 static inline thdid_t
 sl_thd_thdid(struct sl_thd *t)
 { return sl_thd_aepinfo(t)->tid; }
+
+static inline struct sl_thd *
+sl_thd_schedthd(struct sl_thd *t)
+{ return t->sched; }
 
 #endif /* SL_THD_H */

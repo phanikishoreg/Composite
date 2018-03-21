@@ -155,6 +155,11 @@ sl_thd_block_no_cs(struct sl_thd *t, sl_thd_state_t block_type, cycles_t timeout
 	assert(t);
 	assert(block_type == SL_THD_BLOCKED_TIMEOUT || block_type == SL_THD_BLOCKED);
 
+	if (sl_thd_schedthd(t)) {
+		/* TODO: notify the child scheduler of it's thread blocking */
+		assert(0);
+	}
+
 	/*
 	 * If an AEP/a child COMP was blocked and an interrupt caused it to wakeup and run
 	 * but blocks itself before the scheduler could see the wakeup event.. Scheduler
@@ -282,6 +287,11 @@ int
 sl_thd_wakeup_no_cs(struct sl_thd *t)
 {
 	assert(t);
+
+	if (sl_thd_schedthd(t)) {
+		/* TODO: notify the child scheduler of it's thread's wakeup event */
+		assert(0);
+	}
 
 	if (t->state == SL_THD_BLOCKED_TIMEOUT) sl_timeout_remove(t);
 	return sl_thd_wakeup_no_cs_rm(t);

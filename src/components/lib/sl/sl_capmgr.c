@@ -283,6 +283,7 @@ sl_thd_init_ext_no_cs(struct cos_aep_info *aepthd, struct sl_thd *sched)
 	*aep = *aepthd;
 	/* TODO: use sched info for parent -> child notifications */
 	t = sl_thd_alloc_init(aep, 0, 0);
+	t->sched = sched;
 
 done:
 	return t;
@@ -308,6 +309,8 @@ sl_thd_retrieve(thdid_t tid)
 	struct sl_thd       *t      = sl_mod_thd_get(sl_thd_lookup_backend(tid));
 	spdid_t              client = cos_inv_token();
 	struct cos_aep_info  aep;
+	thdid_t              inittid;
+	struct sl_thd       *initt = NULL;
 
 	if (t) return t;
 	/* this can only happen for invocations */
@@ -329,11 +332,18 @@ sl_thd_retrieve(thdid_t tid)
 		/* sl_cs_enter(); */
 	}
 
-	aep.thd = capmgr_thd_retrieve(client, tid);
-	assert(aep.thd); /* this thread must be a child thread and capmgr must know it! */
+	aep.thd = capmgr_thd_retrieve(client, tid, &inittid);
+	assert(aep.thd && inittid); /* this thread must be a child thread and capmgr must know it! */
+	if (inittid != tid) {
+		initt = sl_thd_lkup(inittid);
+		assert(initt); /* initthd in that comp should be initialized */
+
+		assert(initt->properties & SL_THD_PROPERTY_SEND);
+	}
+
 	aep.tid = tid;
 	aep.tc  = sl__globals()->sched_tcap;
-	t = sl_thd_init_ext_no_cs(&aep, NULL);
+	t = sl_thd_init_ext_no_cs(&aep, initt);
 
 	/* if (tid != sl_thdid()) sl_cs_exit(); */
 

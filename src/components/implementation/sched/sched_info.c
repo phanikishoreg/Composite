@@ -9,6 +9,8 @@ static struct sched_childinfo childinfo[SCHED_MAX_CHILD_COMPS];
 static unsigned int sched_num_child = 0;
 static unsigned int sched_num_childsched = 0;
 
+struct sched_shm_info sched_shinfo_cur;
+
 unsigned int self_init = 0, num_child_init = 0;
 
 /* implementation specific initialization per child */
@@ -73,6 +75,7 @@ sched_childinfo_init_intern(int is_raw)
 	comp_flag_t childflags;
 
 	memset(childinfo, 0, sizeof(struct sched_childinfo) * SCHED_MAX_CHILD_COMPS);
+	memset(&sched_shinfo_cur, 0, sizeof(struct sched_shm_info));
 
 	while ((remaining = hypercall_comp_child_next(cos_spd_id(), &child, &childflags)) >= 0) {
 		struct cos_defcompinfo *child_dci = NULL;
@@ -96,6 +99,7 @@ sched_childinfo_init_intern(int is_raw)
 	}
 
 	assert(sched_num_child_get()); /* at least 1 child component */
+	if (!is_raw) sched_shminfo_init(sched_shminfo_cur_get(), 0);
 }
 
 void

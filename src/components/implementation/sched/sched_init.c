@@ -8,7 +8,7 @@ extern unsigned int self_init, num_child_init;
 extern thdcap_t capmgr_thd_retrieve_next(spdid_t child, thdid_t *tid);
 
 int
-schedinit_child(void)
+schedinit_child(cbuf_t id)
 {
 	spdid_t c = cos_inv_token();
 	thdid_t thdid  = 0;
@@ -39,6 +39,8 @@ schedinit_child(void)
 		t = sl_thd_init_ext(&aep, sched_child_initthd_get(ci));
 		if (!t) return -1;
 	} while (thdid);
+
+	sched_shminfo_init(sched_child_shminfo_get(ci), id);
 	num_child_init++;
 
 	return 0;

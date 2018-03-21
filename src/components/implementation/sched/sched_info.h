@@ -4,6 +4,7 @@
 #include <cos_kernel_api.h>
 #include <cos_defkernel_api.h>
 #include <cos_types.h>
+#include <sched_shm.h>
 
 #define SCHED_MAX_CHILD_COMPS 8
 
@@ -12,6 +13,7 @@ struct sched_childinfo {
 	struct sl_thd         *initthd;
 	comp_flag_t            flags;
 	spdid_t                id;
+	struct sched_shm_info  shinfo;
 };
 
 struct sched_childinfo *sched_childinfo_find(spdid_t spdid);
@@ -43,6 +45,13 @@ static inline void
 sched_child_initthd_set(struct sched_childinfo *sci, struct sl_thd *t)
 {
 	if (sci) sci->initthd = t;
+}
+
+static inline struct sched_shm_info *
+sched_child_shminfo_get(struct sched_childinfo *sci)
+{
+	assert(sci);
+	return &(sci->shinfo);
 }
 
 #endif /* SCHED_INFO_H */

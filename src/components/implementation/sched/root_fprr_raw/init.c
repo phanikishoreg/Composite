@@ -14,6 +14,18 @@ capmgr_thd_retrieve_next(spdid_t child, thdid_t *tid)
 	assert(0);
 }
 
+cbuf_t
+memmgr_shared_page_allocn(u32_t num_pages, vaddr_t *pgaddr)
+{
+	return 0;
+}
+
+u32_t
+memmgr_shared_page_map(cbuf_t id, vaddr_t *pgaddr)
+{
+	assert(0);
+}
+
 void
 sched_child_init(struct sched_childinfo *schedci)
 {
