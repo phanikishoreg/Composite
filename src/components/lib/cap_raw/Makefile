@@ -1,6 +1,6 @@
 include Makefile.src Makefile.comp
 
-LIB_OBJS=sl_capmgr.o sl_raw.o sl_sched.o sl_mod_fprr.o sl_lock.o sl_thd_static_backend.o sched_raw.o
+LIB_OBJS=cap_raw.o mem_raw.o
 LIBS=$(LIB_OBJS:%.o=%.a)
 CINC+=-m32
 

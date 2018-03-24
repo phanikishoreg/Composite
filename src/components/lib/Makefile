@@ -10,8 +10,8 @@ SIMPLE_STKLIB=simple_stklib.o
 CINC_ENV=$(CINC)
 export CINC_ENV
 
-.PHONY: all sl ps
-all: $(LIBS) $(MAND) $(SIMPLE_STKLIB) sl
+.PHONY: all sl ps cap_raw
+all: $(LIBS) $(MAND) $(SIMPLE_STKLIB) sl cap_raw
 
 # we have to compile these without dietlibc so that there are not
 # symbol conflicts and this is why we have the %.a here and don't
@@ -30,6 +30,9 @@ $(SIMPLE_STKLIB): $(SIMPLE_STACKS)
 sl:
 	make $(MAKEFLAGS) -C sl
 
+cap_raw:
+	make $(MAKEFLAGS) -C cap_raw
+
 %.o:%.S
 	$(info |     [AS]   Compiling assembly file $^ into $@)
 	@$(AS) $(ASFLAGS) $(CINC) -c -o $@ $^
@@ -42,6 +45,7 @@ clean:
 	$(info |     [RM]   Cleaning up directory)
 	@rm -f a.out *.o *.a *.d *~
 	make -C sl clean
+	make -C cap_raw clean
 
 distclean:
 	make -C musl-1.1.11 distclean
