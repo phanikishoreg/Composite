@@ -89,6 +89,17 @@ test_heapmem(void)
 	PRINTLOG(PRINT_DEBUG, "%s: heap allocation capmgr unit tests\n", failure ? "FAILURE" : "SUCCESS");
 }
 
+#define TEST_PA    0xffff0000 /* test only arbitrary PA mapping and not r/w access to it */
+#define TEST_PA_SZ (4*PAGE_SIZE)
+
+static void
+test_pa2va_map_only(void)
+{
+	vaddr_t va = memmgr_pa2va_map((paddr_t)TEST_PA, (unsigned int)TEST_PA_SZ);
+
+	PRINTLOG(PRINT_DEBUG, "%s: phy->virt mapping capmgr unit tests\n", va == 0 ? "FAILURE" : "SUCCESS");
+}
+
 static void
 test_sharedmem(void)
 {
@@ -113,6 +124,7 @@ cos_init(void)
 	test_thds();
 	test_sharedmem();
 	test_heapmem();
+	test_pa2va_map_only();
 	hypercall_comp_init_done();
 
 	PRINTLOG(PRINT_ERROR, "Cannot reach here!\n");

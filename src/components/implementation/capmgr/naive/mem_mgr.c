@@ -13,7 +13,6 @@ memmgr_heap_page_allocn(unsigned int npages)
 	struct cap_comp_info *cur_rci = cap_info_comp_find(cur);
 	struct cos_compinfo  *cur_ci  = cap_info_ci(cur_rci);
 	vaddr_t src_pg, dst_pg;
-	unsigned int off = 0;
 
 	if (!cur_rci || !cap_info_init_check(cur_rci)) return 0;
 	if (!cur_ci) return 0;
@@ -23,6 +22,22 @@ memmgr_heap_page_allocn(unsigned int npages)
 	dst_pg = cos_mem_aliasn(cur_ci, cap_ci, src_pg, npages * PAGE_SIZE);
 
 	return dst_pg;
+}
+
+vaddr_t
+memmgr_pa2va_map(paddr_t pa, unsigned int len)
+{
+	spdid_t cur = cos_inv_token();
+	struct cap_comp_info *cur_rci = cap_info_comp_find(cur);
+	struct cos_compinfo  *cur_ci  = cap_info_ci(cur_rci);
+	vaddr_t va = 0;
+
+	if (!cur_rci || !cap_info_init_check(cur_rci)) return 0;
+	if (!cur_ci) return 0;
+
+	va = (vaddr_t)cos_hw_map(cur_ci, BOOT_CAPTBL_SELF_INITHW_BASE, pa, len);
+
+	return va;
 }
 
 cbuf_t
